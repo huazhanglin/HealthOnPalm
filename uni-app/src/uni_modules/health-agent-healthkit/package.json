@@ -1,0 +1,56 @@
+{
+  "id": "health-agent-healthkit",
+  "displayName": "Health On Palm HealthKit",
+  "version": "0.1.0",
+  "description": "Health On Palm 自研 iOS HealthKit UTS 插件（步数/睡眠/心率/活动能量/站立）",
+  "keywords": ["HealthKit", "health", "iOS", "UTS"],
+  "repository": "",
+  "engines": {
+    "HBuilderX": "^4.0.0"
+  },
+  "dcloudext": {
+    "type": "uts",
+    "sale": {
+      "regular": {
+        "price": "0.00"
+      }
+    },
+    "contact": {
+      "qq": ""
+    },
+    "declaration": {
+      "ads": "无",
+      "data": "插件仅读取设备本地 HealthKit 数据，不上传至插件作者服务器",
+      "permissions": "NSHealthShareUsageDescription / HealthKit Capability"
+    }
+  },
+  "uni_modules": {
+    "dependencies": [],
+    "encrypt": [],
+    "treeShaking": {
+      "app": {
+        "ios": false
+      }
+    },
+    "platforms": {
+      "cloud": {
+        "tcb": "y",
+        "aliyun": "y"
+      },
+      "client": {
+        "App": {
+          "app-vue": "y",
+          "app-nvue": "n",
+          "app-uvue": "n"
+        },
+        "H5-mobile": {
+          "Safari": "n",
+          "Android Browser": "n"
+        },
+        "小程序": {
+          "微信": "n"
+        }
+      }
+    }
+  }
+}

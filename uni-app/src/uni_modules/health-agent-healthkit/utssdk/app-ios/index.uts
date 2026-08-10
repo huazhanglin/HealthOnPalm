@@ -1,0 +1,35 @@
+import type { HealthKitTodayPayload } from '../interface.uts'
+
+export function isHealthKitAvailable(): boolean {
+  return HealthKitBridge.isHealthKitAvailable()
+}
+
+export function requestHealthKitAuthorization(readTypes?: string[]): Promise<string> {
+  const types = readTypes != null ? readTypes : [] as string[]
+  return new Promise<string>((resolve, reject) => {
+    HealthKitBridge.requestAuthorization(types, (success: boolean, error: string | null) => {
+      if (success) {
+        resolve('SUCCESS')
+      } else {
+        reject(error != null ? error : 'AUTH_FAILED')
+      }
+    })
+  })
+}
+
+/** 返回 Swift 侧 JSON 字符串，由 JS 层 JSON.parse（避免 UTS 强制类型转换崩溃） */
+export function fetchTodayHealthKitJson(): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    HealthKitBridge.fetchTodayHealthKitData((json: string | null, error: string | null) => {
+      if (json == null || json.length == 0) {
+        reject(error != null ? error : 'FETCH_FAILED')
+        return
+      }
+      resolve(json)
+    })
+  })
+}
+
+export function getHealthKitDiagnostics(): string {
+  return HealthKitBridge.getHealthKitDiagnostics()
+}

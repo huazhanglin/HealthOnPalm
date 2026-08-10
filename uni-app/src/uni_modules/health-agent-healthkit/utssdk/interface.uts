@@ -1,0 +1,51 @@
+/**
+ * Health On Palm HealthKit 插件对外接口声明
+ */
+
+export type HealthKitAuthResult = string
+
+export type HealthKitSleepData = {
+  totalHours: number
+  deepSleepHours?: number
+  remSleepHours?: number
+  wakeUps?: number
+}
+
+export type HealthKitHeartRateData = {
+  resting: number | null
+  avg?: number | null
+}
+
+export type HealthKitWorkoutRecord = {
+  id: string
+  workoutType: string
+  workoutTypeId: number
+  startDate: string
+  endDate: string
+  duration: number
+  calories?: number
+  distance?: number
+  distanceKm?: number
+}
+
+export type HealthKitTodayPayload = {
+  available: boolean
+  date: string
+  steps: number
+  activeCalories: number
+  basalCalories: number
+  standHours: number
+  exerciseMinutes: number
+  sleep: HealthKitSleepData | null
+  heartRate: HealthKitHeartRateData | null
+  workouts: HealthKitWorkoutRecord[]
+  totalDistance: number
+  error?: string
+}
+
+export type HealthKitBridge = {
+  isHealthKitAvailable(): boolean
+  requestHealthKitAuthorization(readTypes: string[]): Promise<HealthKitAuthResult>
+  fetchTodayHealthKitData(): Promise<HealthKitTodayPayload>
+  getHealthKitDiagnostics(): string
+}

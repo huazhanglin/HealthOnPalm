@@ -1,0 +1,14 @@
+{
+  "stylesheet": ["manual-pdf.css"],
+  "pdf_options": {
+    "format": "A4",
+    "margin": {
+      "top": "16mm",
+      "right": "14mm",
+      "bottom": "16mm",
+      "left": "14mm"
+    },
+    "printBackground": true
+  },
+  "document_title": "Health On Palm 使用说明书"
+}

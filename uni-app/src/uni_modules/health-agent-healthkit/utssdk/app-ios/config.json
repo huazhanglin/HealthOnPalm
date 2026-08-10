@@ -1,0 +1,4 @@
+{
+  "deploymentTarget": "14.0",
+  "frameworks": ["HealthKit.framework"]
+}

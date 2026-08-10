@@ -1,0 +1,96 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "Health On Palm"
+      }
+    },
+    {
+      "path": "pages/records/index",
+      "style": {
+        "navigationBarTitleText": "记录",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "我的档案",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/chat/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "HOP 助手",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/onboarding/index",
+      "style": {
+        "navigationBarTitleText": "新手引导",
+        "navigationBarBackgroundColor": "#FFFFFF",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/healthkit/authorize",
+      "style": {
+        "navigationBarTitleText": "健康数据授权",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/workout/log",
+      "style": {
+        "navigationBarTitleText": "记录运动",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/workout/history",
+      "style": {
+        "navigationBarTitleText": "运动历史",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/sleep/log",
+      "style": {
+        "navigationBarTitleText": "记录睡眠",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/sleep/history",
+      "style": {
+        "navigationBarTitleText": "睡眠历史",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "Health On Palm",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F8FAFC"
+  },
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^Ha(A[a-zA-Z]+)": "@/components/common/Ha$1.vue",
+      "^HaBrandLogo": "@/components/common/HaBrandLogo.vue"
+    }
+  }
+}

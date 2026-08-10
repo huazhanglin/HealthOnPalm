@@ -1,0 +1,40 @@
+// src/styles/common.scss
+
+page {
+    background-color: $color-bg-page;
+    font-family: $font-family;
+    font-size: $font-size-base;
+    color: $color-text-primary;
+    line-height: 1.5;
+  }
+  
+  .container {
+    padding: $spacing-lg;
+  }
+  
+  .card {
+    background-color: $color-bg-card;
+    border-radius: $border-radius-md;
+    box-shadow: $shadow-md;
+    padding: $spacing-lg;
+    margin-bottom: $spacing-md;
+  }
+  
+  .text-primary { color: $color-primary; }
+  .text-secondary { color: $color-text-secondary; }
+  .text-center { text-align: center; }
+  .text-bold { font-weight: bold; }
+  
+  .flex { display: flex; }
+  .flex-col { flex-direction: column; }
+  .flex-center { justify-content: center; align-items: center; }
+  .flex-between { justify-content: space-between; }
+  .flex-1 { flex: 1; }
+  
+  .mt-sm { margin-top: $spacing-sm; }
+  .mt-md { margin-top: $spacing-md; }
+  .mt-lg { margin-top: $spacing-lg; }
+  .mb-sm { margin-bottom: $spacing-sm; }
+  .mb-md { margin-bottom: $spacing-md; }
+  .mb-lg { margin-bottom: $spacing-lg; }
+  

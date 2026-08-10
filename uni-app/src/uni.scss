@@ -1,0 +1,10 @@
+/**
+ * uni-app 全局样式（App 端 page 高度必需，否则 100vh 页面可能渲染空白）
+ */
+@import "@/components/common/variables.scss";
+
+page {
+  height: 100%;
+  background-color: #f8fafc;
+  color: #0f172a;
+}
