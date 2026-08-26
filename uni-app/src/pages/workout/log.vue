@@ -5,10 +5,10 @@ import { createWorkoutLog } from "@/api/workout";
 import { HaButton, HaCard, HaSlider } from "@/components/common";
 import {
   DURATION_PRESETS,
-  WORKOUT_TYPE_OPTIONS,
-  createDefaultWorkoutLogForm,
   getExertionLabel,
   getRecentDateOptions,
+  getWorkoutTypesByCategory,
+  createDefaultWorkoutLogForm,
   type ManualWorkoutType,
   type WorkoutLogForm,
 } from "@/lib/health/workout";
@@ -23,6 +23,7 @@ const isSaving = ref(false);
 const dateOptions = getRecentDateOptions(7);
 const dateLabels = dateOptions.map((item) => item.label);
 const dateIndex = ref(dateOptions.length - 1);
+const typeGroups = getWorkoutTypesByCategory();
 
 const canSave = computed(
   () => !!form.workoutType && form.durationMinutes > 0 && !isSaving.value
@@ -92,7 +93,7 @@ function openHistory(): void {
 }
 
 function openAiSuggestion(): void {
-  uni.navigateTo({ url: "/pages/chat/index" });
+  uni.redirectTo({ url: "/pages/workout/plan" });
 }
 
 onShow(async () => {
@@ -121,16 +122,19 @@ onShow(async () => {
 
       <HaCard class="section">
         <text class="label required">运动类型</text>
-        <view class="type-grid">
-          <view
-            v-for="item in WORKOUT_TYPE_OPTIONS"
-            :key="item.value"
-            class="type-item"
-            :class="{ active: form.workoutType === item.value }"
-            @tap="selectType(item.value)"
-          >
-            <text class="type-icon">{{ item.icon }}</text>
-            <text class="type-label">{{ item.label }}</text>
+        <view v-for="group in typeGroups" :key="group.category" class="type-group">
+          <text class="type-group-title">{{ group.label }}</text>
+          <view class="type-grid">
+            <view
+              v-for="item in group.items"
+              :key="item.value"
+              class="type-item"
+              :class="{ active: form.workoutType === item.value }"
+              @tap="selectType(item.value)"
+            >
+              <text class="type-icon">{{ item.icon }}</text>
+              <text class="type-label">{{ item.label }}</text>
+            </view>
           </view>
         </view>
       </HaCard>
@@ -272,6 +276,22 @@ onShow(async () => {
   color: #94a3b8;
 }
 
+.type-group {
+  margin-bottom: 20rpx;
+}
+
+.type-group:last-child {
+  margin-bottom: 0;
+}
+
+.type-group-title {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 24rpx;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
 .type-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -299,8 +319,9 @@ onShow(async () => {
 
 .type-label {
   margin-top: 8rpx;
-  font-size: 24rpx;
+  font-size: 22rpx;
   color: #334155;
+  text-align: center;
 }
 
 .duration-input {

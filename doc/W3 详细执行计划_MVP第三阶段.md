@@ -1,10 +1,31 @@
 # Health On Palm (HOP) MVP — W3 详细执行计划
 
-> **阶段目标**：HealthKit 真实数据同步跑通 + 手动记录 UI 完成 + 5人以内种子用户内测
-> **时间范围**：Day 15 - Day 28（2026-07-29 至 2026-08-11）
-> **验收标准**：3-5名种子用户可正常使用核心功能（晨间简报 + 健康问答 + 语音输入/播报），AI 回答基于真实健康数据
-> **日均投入**：2-4 小时（OPC 模式）
-> **文档修订**：2026-08-07 — 补充语音能力、邮箱密码登录、TestFlight 分发说明（见下方「中期变更」）
+> **阶段目标**：HealthKit 真实数据同步跑通 + 手动记录 UI 完成 + 5人以内种子用户内测  
+> **时间范围**：Day 15 - Day 28（2026-07-29 至 2026-08-11）  
+> **验收标准（计划）**：3-5名种子用户可正常使用核心功能（晨间简报 + 健康问答 + 语音输入/播报），AI 回答基于真实健康数据  
+> **日均投入**：2-4 小时（OPC 模式）  
+> **文档修订**：2026-08-07 中期变更；**2026-08-24 按实际运行补全验收与对照**
+
+---
+
+## 📋 实际运行对照（2026-08-24）
+
+W3 把 **iOS HealthKit + 手动运动/睡眠 + 晨报反馈 + 邮箱登录 + 语音 + TestFlight 材料**做成了可装包产品。下列与计划稿不同：
+
+| 项 | 实际运行 |
+|----|----------|
+| 主路径 | **iOS App**；微信小程序 **不是**交付物 |
+| 插件路径 | `uni-app/src/uni_modules/health-agent-healthkit/`（不是仓库根 `src/`） |
+| `sync-healthkit` | **已完成并部署**（下文 T3.1 曾写「用户待做」，以本节为准） |
+| SQL | 以 `supabase/migrations/20260806_w3_sync_healthkit.sql` 为准，不是 T3.1 里另写一套建表 |
+| 底部导航（W3 结束时） | **三 Tab：首页 / 记录 / 我的**；五 Tab 是 **W4** |
+| HealthKit 类型（W3 结束时） | 步数、活动热量、锻炼分钟、站立、睡眠、静息/平均心率、Workout；**基础代谢当时未真正查询** |
+| 自动同步 | W3 以授权页手动刷新为主；**半小时/跨日自动同步与晨报前同步是 W4** |
+| 种子用户 | 开发者 **TestFlight + 真机**已跑通；`种子用户反馈追踪表` **仓库内仍为空表**，正式 3–5 人反馈报告未归档 |
+| 说明书 | W3 期间有 **v1.0**（2026-08-08）；v1.1 在 W4 |
+| USB 调试 | 自定义基座必须 **开发证书**；TestFlight 用 **发布证书**（W4 踩坑后写明） |
+
+W3 之后的训练计划闭环、心情、恢复分、首页缓存、HealthKit 扩展：见 `doc/W4 详细执行记录_产品闭环与体验增强.md`。
 
 ---
 
@@ -58,12 +79,12 @@
 - **HealthKit 接入**：W3 实现，使用**自研 UTS 插件** `health-agent-healthkit`（Cursor 已完成）
   > ⚠️ 重要澄清：微信小程序无法直接访问 HealthKit。**W3 主路径是 iOS App（HBuilderX 自定义基座/云打包）**，而非微信小程序
 - **自研 UTS 插件已完成**（Cursor 2026-07-29 完成）：
-  - `uni_modules/health-agent-healthkit/utssdk/app-ios/HealthKitBridge.swift` — 原生读取
-  - `uni_modules/health-agent-healthkit/utssdk/app-ios/index.uts` — iOS 导出入口
-  - `uni_modules/health-agent-healthkit/utssdk/app-ios/UTS.entitlements` — HealthKit Capability
-  - `uni_modules/health-agent-healthkit/utssdk/index.uts` — H5/非 iOS stub
-  - `uni_modules/health-agent-healthkit/index.d.ts` — TypeScript 类型
-  - `src/lib/healthkit/index.ts` — 业务适配层（`isAvailable / authorize / fetchToday / syncTodayFromDevice`）
+  - `uni-app/src/uni_modules/health-agent-healthkit/utssdk/app-ios/HealthKitBridge.swift` — 原生读取
+  - `uni-app/src/uni_modules/health-agent-healthkit/utssdk/app-ios/index.uts` — iOS 导出入口
+  - `uni-app/src/uni_modules/health-agent-healthkit/utssdk/app-ios/UTS.entitlements` — HealthKit Capability
+  - `uni-app/src/uni_modules/health-agent-healthkit/utssdk/index.uts` — H5/非 iOS stub
+  - `uni-app/src/uni_modules/health-agent-healthkit/index.d.ts` — TypeScript 类型
+  - `uni-app/src/lib/healthkit/index.ts` — 业务适配层（`isAvailable / authorize / fetchToday / syncTodayFromDevice`）
 - **测试平台**：
   - ✅ **iOS App 真机**：完整 HealthKit（W3 唯一验收路径）
   - ⚠️ 微信小程序：只能接 WeRun 步数（P2），无法测 HealthKit
@@ -121,22 +142,21 @@ W3 新增模块：
 
 ## 📋 W3 任务总览
 
-| 任务编号 | 任务名称 | 优先级 | 预计耗时 | 依赖 |
-|---------|---------|-------|---------|------|
-| W3-T1 | HealthKit 技术调研 | P0 | 3h | W2 完成 |
-| W3-T2 | uni-app 原生插件开发（iOS HealthKit） | P0 | 8h | T1 |
-| W3-T3 | HealthKit 数据同步 Edge Function | P0 | 4h | T2 |
-| W3-T4 | 前端 HealthKit 授权与同步 UI | P0 | 3h | T2, T3 |
-| W3-T5 | 运动记录页面（手动 + 历史） | P1 | 5h | T4 |
-| W3-T6 | 睡眠记录页面（手动补充） | P1 | 4h | T4 |
-| W3-T7 | 晨间简报反馈机制 | P1 | 3h | T4 |
-| W3-T8 | 种子用户内测管理 | P1 | 3h | T4 |
-| W3-T9 | 数据质量检查 + Mock 回退 | P2 | 3h | T3 |
-| W3-T10 | W3 里程碑验收 + 反馈汇总 | P0 | 4h | T1-T9 |
-| W3-T11 | HOP 助手语音输入 + TTS 播报 | P1 | ~1.5d | 对话页；**已完成** |
-| W3-Auth | 登录改为邮箱+密码 | P1 | ~0.5d | 省短信；**已完成** |
+| 任务编号 | 任务名称 | 优先级 | 预计耗时 | 实际状态 |
+|---------|---------|-------|---------|----------|
+| W3-T1 | HealthKit 技术调研 | P0 | 3h | ✅ `doc/W3-T1-HealthKit技术调研报告.md` |
+| W3-T2 | uni-app 原生插件（iOS HealthKit） | P0 | 8h | ✅ 自研 UTS `health-agent-healthkit` |
+| W3-T3 | HealthKit 同步 Edge Function | P0 | 4h | ✅ 已部署 `sync-healthkit` |
+| W3-T4 | 前端 HealthKit 授权与同步 UI | P0 | 3h | ✅ `pages/healthkit/authorize.vue` |
+| W3-T5 | 运动记录页面（手动 + 历史） | P1 | 5h | ✅ |
+| W3-T6 | 睡眠记录页面 | P1 | 4h | ✅ |
+| W3-T7 | 晨间简报反馈机制 | P1 | 3h | ✅ 采纳/忽略/修改 |
+| W3-T8 | 种子用户内测管理 | P1 | 3h | ♻️ 说明+追踪表已有；**表内用户未填** |
+| W3-T9 | 数据质量检查 + Mock 回退 | P2 | 3h | ✅ 首页来源徽标 / hybrid |
+| W3-T10 | 里程碑验收 + 反馈汇总 | P0 | 4h | ♻️ 工程项已验收；**正式反馈报告未归档** |
+| W3-T11 | HOP 助手语音 | P1 | ~1.5d | ✅ |
+| W3-Auth | 登录改为邮箱+密码 | P1 | ~0.5d | ✅ |
 | **总计（原计划）** | | | **40h** | |
-| **含中期加分** | | | **约 +16h** | |
 
 ---
 
@@ -160,7 +180,7 @@ W3 新增模块：
 | `uni_modules/health-agent-healthkit/utssdk/app-ios/UTS.entitlements` | HealthKit Capability | ✅ |
 | `uni_modules/health-agent-healthkit/utssdk/index.uts` | H5/非 iOS 平台 stub | ✅ |
 | `uni_modules/health-agent-healthkit/index.d.ts` | TypeScript 类型定义 | ✅ |
-| `src/lib/healthkit/index.ts` | 业务适配层（统一 API） | ✅ |
+| `uni-app/src/lib/healthkit/index.ts` | 业务适配层（统一 API） | ✅ |
 | `manifest.json` | 已配置 `NSHealthShareUsageDescription` / `healthkit: true` | ✅ |
 
 **已导出的前端 API（`src/lib/healthkit/index.ts`）：**
@@ -304,7 +324,10 @@ async function handleAuthorize() {
 
 ---
 
-#### ✅ T3.1 HealthKit 数据同步 Edge Function（3h）— 用户待做
+#### ✅ T3.1 HealthKit 数据同步 Edge Function（3h）— **已完成**
+
+> **原计划稿标注「用户待做」。实际已落地：** `supabase/functions/sync-healthkit/index.ts` + 迁移 `20260806_w3_sync_healthkit.sql`，并部署到 `zewznptbyhurxaqirzmb`。操作说明见 `doc/W3-T3-sync-healthkit部署说明.md`。  
+> 下表 SQL 为当时草稿，**不要重复执行与现网冲突的 CREATE**；以 migrations 目录为准。
 
 **目标：** 将 HealthKit 全面数据写入 Supabase，覆盖/补充 Mock 数据，支持运动记录和基础代谢
 
@@ -1239,51 +1262,53 @@ GROUP BY user_feedback;
 
 **W3 验收标准：**
 
-| 功能 | 验收条件 | 状态 |
-|------|---------|------|
-| HealthKit 同步 | 授权后当天数据自动同步到 Supabase | |
-| 数据质量评估 | 无数据时自动回退 Mock | |
-| 手动运动记录 | 可记录 + 保存成功 + 历史查看 | |
-| 手动睡眠记录 | 可记录 + 保存成功 + 历史查看 | |
-| 简报反馈 | 采纳/忽略/修改功能正常 | |
-| 邮箱登录 | 可用邮箱注册并登录（无需短信） | ✅ 已实现 |
-| 语音输入 | 按住说话可转写并填入输入框 | ✅ 已实现 |
-| 语音播报 | 助手回复可播放/停止 | ✅ 已实现 |
-| 种子用户体验 | 3-5 名用户经 TestFlight 完成首次体验 | |
-| 种子用户反馈 | 收集到 ≥10 条有效反馈 | |
-| 反馈报告 | 报告包含数据、问题清单、迭代建议 | |
+| 功能 | 验收条件 | 状态（现行） |
+|------|---------|--------------|
+| HealthKit 同步 | 授权后可把当日数据写到 Supabase | ✅ 真机已通（W3 以授权页手动刷新为主；自动同步见 W4） |
+| 数据质量评估 | 无数据时回退 Mock / 标明来源 | ✅ |
+| 手动运动记录 | 可记录 + 保存 + 历史 | ✅ |
+| 手动睡眠记录 | 可记录 + 保存 + 历史 | ✅ |
+| 简报反馈 | 采纳/忽略/修改功能正常 | ✅ |
+| 邮箱登录 | 可用邮箱注册并登录（无需短信） | ✅ |
+| 语音输入 | 按住说话可转写并填入输入框 | ✅ |
+| 语音播报 | 助手回复可播放/停止 | ✅ |
+| 种子用户体验 | 3-5 名用户经 TestFlight 完成首次体验 | ♻️ 开发者 TestFlight 已通；多人表未归档 |
+| 种子用户反馈 | 收集到 ≥10 条有效反馈 | ❌ 仓库内追踪表仍空 |
+| 反馈报告 | 报告包含数据、问题清单、迭代建议 | ❌ 未形成正式报告文件 |
 
 ---
 
 ## 📊 W3 里程碑验收清单
 
+> 勾选 = **工程与开发者真机**（2026-08-24）。种子运营项单独标注。
+
 ### 必须完成（P0）
 
-- [ ] HealthKit 数据同步（iOS 真机测试通过）
-- [ ] 数据质量评估 + Mock 回退逻辑
-- [ ] 手动运动/睡眠记录 UI 完成
-- [ ] 晨间简报反馈机制
+- [x] HealthKit 数据同步（iOS 真机测试通过）
+- [x] 数据质量评估 + Mock 回退逻辑
+- [x] 手动运动/睡眠记录 UI 完成
+- [x] 晨间简报反馈机制
 - [x] 邮箱 + 密码注册/登录（替代短信验证码）
 - [x] HOP 助手语音输入 + TTS 播报
-- [ ] 3-5名种子用户经 TestFlight 完成首次体验
-- [ ] 种子用户反馈报告完成
+- [ ] 3-5名种子用户经 TestFlight 完成首次体验 — **开发者已通；多人未在追踪表归档**
+- [ ] 种子用户反馈报告完成 — **未归档**
 
 ### 可选完成（P1）
 
-- [ ] 运动历史周视图 + 汇总统计
-- [ ] 睡眠历史周视图 + 趋势分析
+- [x] 运动历史周视图 + 汇总统计
+- [x] 睡眠历史周视图 + 趋势分析
 - [ ] 种子用户每日使用监控（DAU/调用量）
-- [ ] 数据来源标识（真实/模拟）
-- [ ] 语音体验打磨（长按手势、弱网提示等）
+- [x] 数据来源标识（真实/模拟）
+- [x] 语音体验（按住说话、权限与失败提示）— 可持续打磨
 
-### W3 暂不做（V1.0）
+### W3 暂不做（当时写 V1.0）
 
-- ❌ Android 设备数据同步
-- ❌ AI 睡眠分析（Sleep Insight Agent）
-- ❌ AI 周报生成（Weekly Review Agent）
-- ❌ 微信支付 / 订阅付费
-- ❌ 定时推送（微信服务通知）
-- ❌ 正式对外发布
+- ❌ Android 设备数据同步 — **至今未做**
+- ❌ AI 睡眠分析（Sleep Insight Agent）— **至今未做**
+- ❌ AI 周报生成（Weekly Review Agent）— **至今未做**
+- ❌ 微信支付 / 订阅付费 — **至今未做**
+- ❌ 定时推送（微信服务通知）— **至今未做**
+- ❌ 正式对外发布 — **至今未做**
 
 ---
 
@@ -1306,10 +1331,12 @@ GROUP BY user_feedback;
 
 ## 📅 W4 预览
 
-W3 完成后，W4 将聚焦 **V1.0 正式版**，核心任务：
+> **2026-08-23 修订**：W3 结束后实际执行的不是本节预告的 V1.0 线，而是训练闭环、心情、恢复分、首页缓存与 HealthKit 扩展。完整记录见 **`doc/W4 详细执行记录_产品闭环与体验增强.md`**。原预告项顺延 W5。
+
+W3 完成时曾预告 W4 聚焦 **V1.0 正式版**（当时未执行）：
 
 ```
-W4 任务预览：
+W4 任务预览（历史预告，未按此执行）：
 ├── AI 睡眠分析 Agent（Sleep Insight Agent）
 ├── AI 周报生成（Weekly Review Agent）
 ├── 微信支付订阅体系接入（Pro 会员）
@@ -1343,11 +1370,12 @@ W4 任务预览：
 | uni-app 原生插件 | https://nativesupport.dcloud.net.cn/README |
 | dcloud 插件市场 | https://ext.dcloud.net.cn/?search=healthkit |
 | Apple Health App | 手机自带「健康」App（iOS） |
-| 微信小程序测试 | 开发工具 → 真机调试 → 开启 HealthKit |
+| 微信小程序 | **无法**测 HealthKit；W3 未作为交付端 |
 
 ---
 
-*文档版本：v1.0*
-*创建日期：2026-07-29*
-*预计执行：2026-07-29 至 2026-08-11*
-*前置依赖：W2 全部完成*
+*文档版本：v1.2（2026-08-24 按实际运行修订）*  
+*创建日期：2026-07-29*  
+*预计执行：2026-07-29 至 2026-08-11*  
+*前置依赖：W2 全部完成*  
+*后续实际迭代：`doc/W4 详细执行记录_产品闭环与体验增强.md`*

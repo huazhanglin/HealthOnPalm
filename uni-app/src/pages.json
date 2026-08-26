@@ -32,7 +32,7 @@
       "path": "pages/chat/index",
       "style": {
         "navigationStyle": "custom",
-        "navigationBarTitleText": "HOP 助手",
+        "navigationBarTitleText": "助手",
         "navigationBarBackgroundColor": "#FFFFFF"
       }
     },
@@ -59,6 +59,13 @@
       }
     },
     {
+      "path": "pages/workout/plan",
+      "style": {
+        "navigationBarTitleText": "训练",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
       "path": "pages/workout/history",
       "style": {
         "navigationBarTitleText": "运动历史",
@@ -76,6 +83,20 @@
       "path": "pages/sleep/history",
       "style": {
         "navigationBarTitleText": "睡眠历史",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/mood/log",
+      "style": {
+        "navigationBarTitleText": "记录心情",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/mood/history",
+      "style": {
+        "navigationBarTitleText": "心情历史",
         "navigationBarBackgroundColor": "#FFFFFF"
       }
     }

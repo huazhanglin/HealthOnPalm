@@ -10,6 +10,7 @@ import {
   type StoredAuthSession,
 } from "@/types/auth";
 import type { User } from "@/types/database";
+import { useHomeStore } from "@/stores/home";
 import { isValidEmail, isValidPassword } from "@/utils/email";
 import { setStorageJson, uniAuthStorage } from "@/utils/storage";
 
@@ -172,6 +173,7 @@ export const useUserStore = defineStore("user", () => {
     phone.value = null;
     userId.value = null;
     profile.value = null;
+    useHomeStore().clear();
   }
 
   /** 邮箱注册并登录（Confirm email 关闭时可直接进会话） */

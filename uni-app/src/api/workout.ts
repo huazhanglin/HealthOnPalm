@@ -40,12 +40,13 @@ export async function createWorkoutLog(
   const payload = {
     date: form.date,
     workout_type: form.workoutType,
-    workout_name: getWorkoutTypeLabel(form.workoutType),
+    workout_name: form.workoutName?.trim() || getWorkoutTypeLabel(form.workoutType),
     duration_minutes: Math.round(form.durationMinutes),
     perceived_exertion: Math.round(form.perceivedExertion),
     mood_after: "normal" as const,
     notes: form.notes.trim() || null,
-    source: "user_logged" as const,
+    source: (form.source || "user_logged") as "user_logged" | "ai_suggested",
+    exercise_ids: form.exerciseIds?.length ? form.exerciseIds : [],
   };
 
   // #ifdef APP-PLUS

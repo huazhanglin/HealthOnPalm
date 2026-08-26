@@ -3,6 +3,7 @@ import { onHide, onShow, onUnload } from "@dcloudio/uni-app";
 import { storeToRefs } from "pinia";
 import { computed, onUnmounted, ref } from "vue";
 import { HaButton, HaLoading } from "@/components/common";
+import HomeTabBar from "@/components/HomeTabBar.vue";
 import {
   cancelVoiceRecording,
   playSpeechForMessage,
@@ -46,12 +47,6 @@ const isWaitingReply = computed(() => {
 const isVoiceBusy = computed(
   () => voiceState.value === "recording" || voiceState.value === "processing"
 );
-
-/** 返回上一页 */
-function goBack(): void {
-  stopSpeechPlayback();
-  uni.navigateBack();
-}
 
 /** 发送消息 */
 function handleSend(): void {
@@ -177,11 +172,7 @@ onUnmounted(() => {
     <view class="nav-bar">
       <view class="status-bar" />
       <view class="nav-content">
-        <view class="nav-back" @tap="goBack">
-          <text class="nav-back-icon">‹</text>
-        </view>
         <text class="nav-title">HOP 助手</text>
-        <view class="nav-placeholder" />
       </view>
     </view>
 
@@ -310,6 +301,8 @@ onUnmounted(() => {
     <view v-if="voiceState === 'recording'" class="voice-overlay">
       <text class="voice-overlay-text">正在聆听，松开发送识别</text>
     </view>
+
+    <HomeTabBar active="chat" />
   </view>
 </template>
 
@@ -336,34 +329,15 @@ onUnmounted(() => {
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   height: 88rpx;
   padding: 0 24rpx;
-}
-
-.nav-back {
-  width: 64rpx;
-  height: 64rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.nav-back-icon {
-  font-size: 52rpx;
-  color: #0f172a;
-  line-height: 1;
-  font-weight: 300;
 }
 
 .nav-title {
   font-size: 32rpx;
   font-weight: 600;
   color: #0f172a;
-}
-
-.nav-placeholder {
-  width: 64rpx;
 }
 
 .message-list {
@@ -533,7 +507,8 @@ onUnmounted(() => {
   flex-direction: row;
   align-items: flex-end;
   gap: 16rpx;
-  padding: 16rpx 24rpx calc(16rpx + env(safe-area-inset-bottom));
+  padding: 16rpx 24rpx;
+  margin-bottom: calc(110rpx + env(safe-area-inset-bottom));
   background-color: #ffffff;
   border-top: 2rpx solid #e2e8f0;
   box-sizing: border-box;

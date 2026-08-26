@@ -65,6 +65,13 @@ interface TodaySnapshotRow {
   exercise_minutes: number | null;
   resting_heart_rate: number | null;
   avg_heart_rate: number | null;
+  max_heart_rate: number | null;
+  walking_hr_avg: number | null;
+  hrv_ms: number | null;
+  spo2_percent: number | null;
+  respiratory_rate: number | null;
+  flights_climbed: number | null;
+  vo2_max: number | null;
   total_workouts: number | null;
   total_distance_meters: number | null;
   source: string | null;
@@ -80,7 +87,7 @@ interface TodaySleepRow {
 }
 
 const SUMMARY_SELECT =
-  "steps,stand_hours,active_calories,basal_calories,exercise_minutes,resting_heart_rate,avg_heart_rate,total_workouts,total_distance_meters,source";
+  "steps,stand_hours,active_calories,basal_calories,exercise_minutes,resting_heart_rate,avg_heart_rate,max_heart_rate,walking_hr_avg,hrv_ms,spo2_percent,respiratory_rate,flights_climbed,vo2_max,total_workouts,total_distance_meters,source";
 
 const SLEEP_SELECT =
   "total_sleep_hours,deep_sleep_hours,rem_sleep_hours,light_sleep_hours,wake_ups,source";
@@ -118,6 +125,13 @@ function mapTodayMetrics(
     activityMinutes: buildActivityMinutes(summary ?? null, workouts),
     restingHeartRate: summary?.resting_heart_rate ?? null,
     avgHeartRate: summary?.avg_heart_rate ?? null,
+    maxHeartRate: summary?.max_heart_rate ?? null,
+    walkingHeartRateAvg: summary?.walking_hr_avg ?? null,
+    hrvMs: summary?.hrv_ms ?? null,
+    spo2Percent: summary?.spo2_percent ?? null,
+    respiratoryRate: summary?.respiratory_rate ?? null,
+    flightsClimbed: summary?.flights_climbed ?? null,
+    vo2Max: summary?.vo2_max ?? null,
     totalWorkouts: summary?.total_workouts ?? null,
     totalDistanceMeters: summary?.total_distance_meters ?? null,
   };
@@ -269,9 +283,10 @@ export async function fetchTodayDailySummary(
       ai_workout_readiness: WorkoutReadiness | null;
       user_feedback: BriefFeedback | null;
       user_feedback_note: string | null;
+      context_snapshot: unknown;
     }>(
       "daily_summaries",
-      `user_id=eq.${userId}&date=eq.${today}&select=ai_brief,ai_recovery_score,ai_workout_readiness,user_feedback,user_feedback_note`,
+      `user_id=eq.${userId}&date=eq.${today}&select=ai_brief,ai_recovery_score,ai_workout_readiness,user_feedback,user_feedback_note,context_snapshot`,
       accessToken
     );
 
@@ -284,6 +299,7 @@ export async function fetchTodayDailySummary(
       workoutReadiness: data.ai_workout_readiness ?? null,
       feedback: data.user_feedback ?? null,
       feedbackNote: data.user_feedback_note ?? null,
+      sleepMissing: extractSleepMissing(data.context_snapshot),
     };
   } catch (error) {
     console.error("[health] 查询 daily_summaries 简报失败:", error);
@@ -295,7 +311,7 @@ export async function fetchTodayDailySummary(
   const { data, error } = await supabase
     .from("daily_summaries")
     .select(
-      "ai_brief, ai_recovery_score, ai_workout_readiness, user_feedback, user_feedback_note"
+      "ai_brief, ai_recovery_score, ai_workout_readiness, user_feedback, user_feedback_note, context_snapshot"
     )
     .eq("user_id", userId)
     .eq("date", today)
@@ -315,8 +331,24 @@ export async function fetchTodayDailySummary(
     workoutReadiness: (data.ai_workout_readiness as WorkoutReadiness | null) ?? null,
     feedback: (data.user_feedback as BriefFeedback | null) ?? null,
     feedbackNote: data.user_feedback_note ?? null,
+    sleepMissing: extractSleepMissing(data.context_snapshot),
   };
   // #endif
+}
+
+function extractSleepMissing(snapshot: unknown): boolean | null {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const obj = snapshot as {
+    recovery?: { sleep_missing?: boolean };
+    data_quality?: { has_sleep?: boolean };
+  };
+  if (typeof obj.recovery?.sleep_missing === "boolean") {
+    return obj.recovery.sleep_missing;
+  }
+  if (typeof obj.data_quality?.has_sleep === "boolean") {
+    return !obj.data_quality.has_sleep;
+  }
+  return null;
 }
 
 /** 将 daily_summaries 缓存转为展示数据 */
@@ -333,6 +365,7 @@ export function toMorningBriefData(
     workoutReadiness: summary.workoutReadiness,
     feedback: summary.feedback ?? null,
     feedbackNote: summary.feedbackNote ?? null,
+    sleepMissing: summary.sleepMissing ?? null,
   };
 }
 
@@ -372,3 +405,39 @@ export {
 } from "@/lib/health/metrics-display";
 
 export type { TodayMetricDisplayItem } from "@/lib/health/types";
+
+export {
+  formatExerciseAttribution,
+  formatExerciseTitle,
+  getExerciseById,
+  getExercisesByIds,
+  intensitiesForReadiness,
+  listExercises,
+  pickPlanCandidates,
+  resolveExerciseDescription,
+} from "@/lib/health/exercises";
+
+export type { Exercise, ExerciseQuery } from "@/lib/health/exercises";
+
+export {
+  flattenPlanExerciseIds,
+  formatPlanItemTitle,
+  readinessLabel,
+} from "@/lib/health/workout-plan";
+
+export type { WorkoutPlan, WorkoutPlanItem } from "@/lib/health/workout-plan";
+
+export {
+  MOOD_OPTIONS,
+  createDefaultMoodLogForm,
+  formatMoodDateLabel,
+  getMoodEmoji,
+  getMoodLabel,
+  getMoodMeta,
+  getMoodWeekDateKeys,
+  getRecentMoodDateOptions,
+  summarizeMoodWeek,
+  validateMoodLogForm,
+} from "@/lib/health/mood";
+
+export type { MoodLogForm, MoodOption, MoodValue } from "@/lib/health/mood";

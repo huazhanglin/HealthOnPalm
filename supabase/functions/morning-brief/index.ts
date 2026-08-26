@@ -11,6 +11,12 @@ import {
   type HealthDataSource,
 } from "../_shared/data-quality.ts";
 import { callSiliconFlowLLMWithFallback } from "../_shared/llm.ts";
+import {
+  countConsecutiveRestDaysFromSet,
+  countRestDaysInLast7FromSet,
+  daysAgoYmd,
+  type RecoveryResult,
+} from "../_shared/recovery.ts";
 import { runSafetyCheck } from "../_shared/safety.ts";
 
 // ============ 配置 ============
@@ -30,17 +36,6 @@ interface UserProfile {
 }
 
 type HealthData = BriefHealthData;
-
-interface RecoveryResult {
-  score: number;
-  recommendation: "train" | "light" | "rest";
-  breakdown: {
-    sleep_score: number;
-    rest_score: number;
-    activity_score: number;
-    mood_score: number;
-  };
-}
 
 // ============ LLM 调用 ============
 const BRIEF_SYSTEM_PROMPT = `你是 Health On Palm（简称 HOP），一位专业、温暖、简洁的个人健康教练。
@@ -103,17 +98,56 @@ function buildFallbackBrief(
       ? "\n\n（今日部分健康数据未完整同步，建议仅供参考。）"
       : "";
 
+  const sleepLine = quality.has_sleep
+    ? `昨夜睡眠 ${healthData.sleep.total_hours} 小时，`
+    : `昨夜睡眠数据缺失，恢复分仅供参考；`;
+
   return `${emoji} 早安，${name}！今日关键词：${keyword}。
 
 ${action}
 
-昨夜睡眠 ${healthData.sleep.total_hours} 小时，步数 ${healthData.steps.toLocaleString()} 步，恢复分 ${recovery.score}/100。${qualityNote}`;
+${sleepLine}步数 ${healthData.steps.toLocaleString()} 步，恢复分 ${recovery.score}/100。${qualityNote}`;
 }
 
 // ============ 恢复分计算 ============
+async function fetchRestDayMetrics(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  today: string,
+): Promise<{ consecutive: number; inLast7: number }> {
+  const start = daysAgoYmd(today, 13);
+  const { data, error } = await supabase
+    .from("workout_logs")
+    .select("date")
+    .eq("user_id", userId)
+    .gte("date", start)
+    .lte("date", today)
+    .is("deleted_at", null);
+
+  if (error) {
+    console.warn("[morning-brief] workout_logs rest-day query failed:", error.message);
+    return { consecutive: 0, inLast7: 0 };
+  }
+
+  const workoutDates = new Set(
+    (data || [])
+      .map((row: { date?: string }) => row.date)
+      .filter((d: string | undefined): d is string => !!d),
+  );
+  return {
+    consecutive: countConsecutiveRestDaysFromSet(workoutDates, today, 7),
+    inLast7: countRestDaysInLast7FromSet(workoutDates, today),
+  };
+}
+
 async function calculateRecovery(
   userId: string,
-  healthData: HealthData
+  healthData: HealthData,
+  options: {
+    hasRealSleep: boolean;
+    restDaysConsecutive: number;
+    restDaysInLast7: number;
+  },
 ): Promise<RecoveryResult> {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -126,11 +160,15 @@ async function calculateRecovery(
       apikey: supabaseKey,
     },
     body: JSON.stringify({
-      sleep_hours: healthData.sleep.total_hours,
-      sleep_quality_score: healthData.sleep.sleep_quality_score,
-      rest_days_consecutive: 0,
+      sleep_hours: options.hasRealSleep ? healthData.sleep.total_hours : 0,
+      sleep_quality_score: options.hasRealSleep
+        ? healthData.sleep.sleep_quality_score
+        : 0,
+      rest_days_consecutive: options.restDaysConsecutive,
+      rest_days_in_last_7: options.restDaysInLast7,
       steps: healthData.steps,
       mood: healthData.mood,
+      has_real_sleep: options.hasRealSleep,
     }),
   });
 
@@ -138,7 +176,7 @@ async function calculateRecovery(
   if (!res.ok || result.error) {
     throw new Error(result.error || `recovery-score 调用失败 (${res.status})`);
   }
-  return result;
+  return result as RecoveryResult;
 }
 
 // ============ 生成晨间简报 Prompt ============
@@ -169,17 +207,23 @@ function buildBriefPrompt(
 - 步数：${healthData.steps.toLocaleString()}步
 - 活动卡路里：${healthData.active_calories}千卡
 - 站立小时：${healthData.stand_hours}小时
-- 睡眠：${healthData.sleep.total_hours}小时（深睡${healthData.sleep.deep_sleep_hours}h）
+${
+  quality.has_sleep
+    ? `- 睡眠：${healthData.sleep.total_hours}小时（深睡${healthData.sleep.deep_sleep_hours}h）
 - 睡眠质量评分：${healthData.sleep.sleep_quality_score}/100
-- 夜间醒来：${healthData.sleep.wake_ups}次
+- 夜间醒来：${healthData.sleep.wake_ups}次`
+    : `- 睡眠：数据缺失（未同步到真实睡眠；恢复分睡眠维按 80% 中性分，勿编造具体睡眠时长）`
+}
 - 静息心率：${healthData.heart_rate.resting}bpm
 - 今天已运动：${healthData.workout_done ? "是" : "否"}
 - 今日心情：${healthData.mood}
 
 恢复分析：
-${recoveryEmoji} 恢复分：${recovery.score}/100（睡眠${recovery.breakdown.sleep_score} + 活动${recovery.breakdown.activity_score} + 心情${recovery.breakdown.mood_score}）
+${recoveryEmoji} 恢复分：${recovery.score}/100（睡眠${recovery.breakdown.sleep_score}${
+    recovery.sleep_missing ? "·中性" : ""
+  } + 休息${recovery.breakdown.rest_score} + 活动${recovery.breakdown.activity_score} + 心情${recovery.breakdown.mood_score}）
 ${workoutText}
-
+${recovery.sleep_missing ? "\n注意：请在简报中明确提及「睡眠数据缺失，恢复分仅供参考」，不要编造昨晚睡了多少小时。\n" : ""}
 请生成一段晨间简报：
 1. 一句温暖问候 + 今日关键词（emoji + 一个词）
 2. 今日行动建议（只给一个重点，不贪多）
@@ -243,7 +287,7 @@ async function resolveHealthDataForBrief(
 }> {
   const quality = await assessDataQuality(supabase, userId, today);
 
-  const [{ data: summary }, { data: sleep }] = await Promise.all([
+  const [{ data: summary }, { data: sleep }, { data: moodLog }] = await Promise.all([
     supabase
       .from("daily_summaries")
       .select(
@@ -260,9 +304,24 @@ async function resolveHealthDataForBrief(
       .eq("user_id", userId)
       .eq("date", today)
       .maybeSingle(),
+    supabase
+      .from("mood_logs")
+      .select("mood")
+      .eq("user_id", userId)
+      .eq("date", today)
+      .is("deleted_at", null)
+      .maybeSingle(),
   ]);
 
   const mock = await fetchMockHealthData(userId, profile);
+
+  const resolvedMood =
+    moodLog?.mood === "great" ||
+    moodLog?.mood === "good" ||
+    moodLog?.mood === "normal" ||
+    moodLog?.mood === "tired"
+      ? moodLog.mood
+      : "normal";
 
   const realPartial: Partial<HealthData> = {
     steps: summary?.steps ?? undefined,
@@ -283,7 +342,7 @@ async function resolveHealthDataForBrief(
       avg: summary?.avg_heart_rate ?? mock.heart_rate.avg,
       max: mock.heart_rate.max,
     },
-    mood: "normal",
+    mood: resolvedMood,
     workout_done: !!summary?.has_workout,
   };
 
@@ -416,7 +475,13 @@ Deno.serve(async (req) => {
         today
       );
 
-    const recovery = await calculateRecovery(user_id, healthData);
+    const restMetrics = await fetchRestDayMetrics(supabase, user_id, today);
+
+    const recovery = await calculateRecovery(user_id, healthData, {
+      hasRealSleep: quality.has_sleep,
+      restDaysConsecutive: restMetrics.consecutive,
+      restDaysInLast7: restMetrics.inLast7,
+    });
     if (recovery.score == null || !recovery.recommendation) {
       throw new Error("recovery-score 返回数据不完整");
     }
@@ -463,6 +528,7 @@ Deno.serve(async (req) => {
           brief: safeText,
           recovery_score: recovery.score,
           workout_readiness: recovery.recommendation,
+          sleep_missing: recovery.sleep_missing,
           health_data: healthData,
           data_source: source,
           data_quality: quality,

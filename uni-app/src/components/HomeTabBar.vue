@@ -14,6 +14,8 @@ const props = defineProps<{
 
 const tabs: TabItem[] = [
   { key: "home", label: "首页", icon: "🏠", path: "/pages/index/index" },
+  { key: "chat", label: "助手", icon: "💬", path: "/pages/chat/index" },
+  { key: "train", label: "训练", icon: "🏋️", path: "/pages/workout/plan" },
   { key: "records", label: "记录", icon: "📊", path: "/pages/records/index" },
   { key: "profile", label: "我的", icon: "👤", path: "/pages/profile/index" },
 ];
@@ -63,10 +65,11 @@ function switchTab(tab: TabItem): void {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-width: 0;
 }
 
 .tab-icon {
-  font-size: 36rpx;
+  font-size: 32rpx;
   opacity: 0.5;
 }
 
@@ -76,8 +79,9 @@ function switchTab(tab: TabItem): void {
 
 .tab-label {
   margin-top: 4rpx;
-  font-size: 22rpx;
+  font-size: 20rpx;
   color: #64748b;
+  line-height: 1.2;
 }
 
 .tab-label.active {

@@ -20,6 +20,14 @@ function openSleepHistory(): void {
   uni.navigateTo({ url: "/pages/sleep/history" });
 }
 
+function openMoodLog(): void {
+  uni.navigateTo({ url: "/pages/mood/log" });
+}
+
+function openMoodHistory(): void {
+  uni.navigateTo({ url: "/pages/mood/history" });
+}
+
 onShow(async () => {
   const onboarded = await ensureOnboarded();
   if (!onboarded) return;
@@ -30,7 +38,7 @@ onShow(async () => {
   <view class="page">
     <view class="header">
       <text class="title">健康记录</text>
-      <text class="desc">记录运动与睡眠，让 HOP 建议更贴合你的状态</text>
+      <text class="desc">记录运动、心情与睡眠，让 HOP 建议更贴合你的状态</text>
     </view>
 
     <view class="entry-wrap" @tap="openWorkoutLog">
@@ -53,6 +61,32 @@ onShow(async () => {
           <view class="entry-meta">
             <text class="entry-title">运动历史</text>
             <text class="entry-desc">近 7 天记录、周汇总与删除管理</text>
+          </view>
+          <text class="entry-arrow">›</text>
+        </view>
+      </HaCard>
+    </view>
+
+    <view class="entry-wrap" @tap="openMoodLog">
+      <HaCard class="entry-card">
+        <view class="entry-row">
+          <text class="entry-icon">😊</text>
+          <view class="entry-meta">
+            <text class="entry-title">记录心情</text>
+            <text class="entry-desc">每日一记，参与恢复分计算</text>
+          </view>
+          <text class="entry-arrow">›</text>
+        </view>
+      </HaCard>
+    </view>
+
+    <view class="entry-wrap" @tap="openMoodHistory">
+      <HaCard class="entry-card">
+        <view class="entry-row">
+          <text class="entry-icon">🗒️</text>
+          <view class="entry-meta">
+            <text class="entry-title">心情历史</text>
+            <text class="entry-desc">近 7 天心情、周汇总与删除管理</text>
           </view>
           <text class="entry-arrow">›</text>
         </view>
@@ -104,7 +138,7 @@ onShow(async () => {
 
 .title {
   font-size: 40rpx;
-  font-weight: 600;
+  font-weight: 700;
   color: #0f172a;
 }
 
@@ -113,14 +147,11 @@ onShow(async () => {
   margin-top: 8rpx;
   font-size: 26rpx;
   color: #64748b;
+  line-height: 1.5;
 }
 
 .entry-wrap {
   margin-bottom: 20rpx;
-}
-
-.entry-card {
-  margin-bottom: 0;
 }
 
 .entry-row {
@@ -130,32 +161,31 @@ onShow(async () => {
 }
 
 .entry-icon {
-  font-size: 44rpx;
+  font-size: 40rpx;
   margin-right: 20rpx;
 }
 
 .entry-meta {
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .entry-title {
-  display: block;
   font-size: 30rpx;
   font-weight: 600;
   color: #0f172a;
 }
 
 .entry-desc {
-  display: block;
   margin-top: 6rpx;
   font-size: 24rpx;
-  color: #94a3b8;
+  color: #64748b;
 }
 
 .entry-arrow {
-  font-size: 40rpx;
-  color: #cbd5e1;
-  line-height: 1;
+  font-size: 36rpx;
+  color: #94a3b8;
 }
 
 .tab-placeholder {

@@ -6,6 +6,7 @@ import type {
   MorningBriefData,
   WorkoutReadiness,
 } from "@/lib/health/types";
+import type { WorkoutPlan } from "@/lib/health/workout-plan";
 
 /** morning-brief Edge Function 返回结构 */
 interface MorningBriefApiResponse {
@@ -14,19 +15,34 @@ interface MorningBriefApiResponse {
     brief: string;
     recovery_score: number;
     workout_readiness: WorkoutReadiness;
+    sleep_missing?: boolean;
     data_source?: MetricsDataSource;
-    data_quality?: { quality_score?: number };
+    data_quality?: { quality_score?: number; has_sleep?: boolean };
   };
+  error?: string;
+}
+
+interface WorkoutPlanApiResponse {
+  success: boolean;
+  data?: WorkoutPlan;
+  cached?: boolean;
   error?: string;
 }
 
 /**
  * Agent API 封装
- * 对接 query-agent 与 memory-working Edge Functions
+ * 对接 query-agent / morning-brief / workout-agent / memory-working
  */
 export const agentApi = {
-  /** 生成/刷新晨间简报 */
+  /** 生成/刷新晨间简报（生成前强制同步最新 HealthKit） */
   async getMorningBrief(userId: string): Promise<MorningBriefData> {
+    try {
+      const { ensureTodaySynced } = await import("@/lib/healthkit");
+      await ensureTodaySynced({ force: true });
+    } catch (error) {
+      console.warn("[agent] 晨报前 HealthKit 同步失败，继续用已有云端数据:", error);
+    }
+
     const result = await callEdgeFunction<MorningBriefApiResponse>("morning-brief", {
       user_id: userId,
     });
@@ -43,7 +59,28 @@ export const agentApi = {
       feedbackNote: null,
       dataSource: result.data.data_source ?? null,
       qualityScore: result.data.data_quality?.quality_score ?? null,
+      sleepMissing:
+        typeof result.data.sleep_missing === "boolean"
+          ? result.data.sleep_missing
+          : result.data.data_quality?.has_sleep === false,
     };
+  },
+
+  /** 今日训练计划（精选动作库闭环） */
+  async getWorkoutPlan(
+    userId: string,
+    options: { forceRefresh?: boolean; bodyweightOnly?: boolean } = {}
+  ): Promise<WorkoutPlan> {
+    const result = await callEdgeFunction<WorkoutPlanApiResponse>("workout-agent", {
+      user_id: userId,
+      force_refresh: Boolean(options.forceRefresh),
+      bodyweight_only: Boolean(options.bodyweightOnly),
+    });
+
+    if (!result.success || !result.data) {
+      throw new Error(result.error || "生成训练计划失败");
+    }
+    return result.data;
   },
 
   /** 健康问答 */

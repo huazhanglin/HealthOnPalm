@@ -9,11 +9,19 @@ import HealthKit
     private static let defaultReadTypeIds: [String] = [
         "HKQuantityTypeIdentifierStepCount",
         "HKQuantityTypeIdentifierActiveEnergyBurned",
+        "HKQuantityTypeIdentifierBasalEnergyBurned",
         "HKQuantityTypeIdentifierAppleExerciseTime",
+        "HKQuantityTypeIdentifierDistanceWalkingRunning",
+        "HKQuantityTypeIdentifierFlightsClimbed",
         "HKCategoryTypeIdentifierAppleStandHour",
         "HKCategoryTypeIdentifierSleepAnalysis",
         "HKQuantityTypeIdentifierRestingHeartRate",
         "HKQuantityTypeIdentifierHeartRate",
+        "HKQuantityTypeIdentifierWalkingHeartRateAverage",
+        "HKQuantityTypeIdentifierHeartRateVariabilitySDNN",
+        "HKQuantityTypeIdentifierOxygenSaturation",
+        "HKQuantityTypeIdentifierRespiratoryRate",
+        "HKQuantityTypeIdentifierVO2Max",
         "HKWorkoutTypeIdentifier",
     ]
 
@@ -88,10 +96,16 @@ import HealthKit
         var basalCalories = 0
         var standHours = 0
         var exerciseMinutes = 0
+        var walkingDistanceMeters: Double = 0
+        var flightsClimbed = 0
         var sleepDict: [String: Any]? = nil
         var heartRateDict: [String: Any]? = nil
+        var hrvMs: Double? = nil
+        var spo2Percent: Double? = nil
+        var respiratoryRate: Double? = nil
+        var vo2Max: Double? = nil
         var workouts: [[String: Any]] = []
-        var totalDistanceMeters: Double = 0
+        var workoutDistanceMeters: Double = 0
         var fetchError: String?
         let resultLock = NSLock()
 
@@ -127,6 +141,45 @@ import HealthKit
         ) { value, err in
             recordError(err)
             activeCalories = Int(value.rounded())
+            group.leave()
+        }
+
+        // 基础代谢能量 (kcal) — 此前只占位未查询
+        group.enter()
+        querySum(
+            quantityId: .basalEnergyBurned,
+            unit: .kilocalorie(),
+            from: dayStart,
+            to: now
+        ) { value, err in
+            recordError(err)
+            basalCalories = Int(value.rounded())
+            group.leave()
+        }
+
+        // 步行+跑步距离
+        group.enter()
+        querySum(
+            quantityId: .distanceWalkingRunning,
+            unit: .meter(),
+            from: dayStart,
+            to: now
+        ) { value, err in
+            recordError(err)
+            walkingDistanceMeters = value
+            group.leave()
+        }
+
+        // 爬楼层数
+        group.enter()
+        querySum(
+            quantityId: .flightsClimbed,
+            unit: .count(),
+            from: dayStart,
+            to: now
+        ) { value, err in
+            recordError(err)
+            flightsClimbed = Int(value.rounded())
             group.leave()
         }
 
@@ -169,12 +222,66 @@ import HealthKit
             group.leave()
         }
 
+        // 心率变异（SDNN，毫秒）
+        group.enter()
+        queryAverage(
+            quantityId: .heartRateVariabilitySDNN,
+            unit: HKUnit.secondUnit(with: .milli),
+            from: dayStart,
+            to: now
+        ) { value, err in
+            recordError(err)
+            hrvMs = value
+            group.leave()
+        }
+
+        // 血氧（HealthKit 为 0–1，转为百分比）
+        group.enter()
+        queryAverage(
+            quantityId: .oxygenSaturation,
+            unit: .percent(),
+            from: dayStart,
+            to: now
+        ) { value, err in
+            recordError(err)
+            if let value = value {
+                spo2Percent = value <= 1.0 ? value * 100 : value
+            }
+            group.leave()
+        }
+
+        // 呼吸频率
+        group.enter()
+        queryAverage(
+            quantityId: .respiratoryRate,
+            unit: HKUnit.count().unitDivided(by: .minute()),
+            from: dayStart,
+            to: now
+        ) { value, err in
+            recordError(err)
+            respiratoryRate = value
+            group.leave()
+        }
+
+        // VO2 Max：取最近一条（非仅今日）
+        group.enter()
+        queryLatest(
+            quantityId: .vo2Max,
+            unit: HKUnit(from: "ml/kg*min"),
+            from: nil,
+            to: now
+        ) { value, err in
+            recordError(err)
+            vo2Max = value
+            group.leave()
+        }
+
         // 今日运动记录
         group.enter()
         queryWorkouts(from: dayStart, to: now) { list, err in
             recordError(err)
             workouts = list
-            totalDistanceMeters = list.reduce(0.0) { sum, item in
+            workoutDistanceMeters = list.reduce(0.0) { sum, item in
                 if let meters = item["distance"] as? Double {
                     return sum + meters
                 }
@@ -187,6 +294,9 @@ import HealthKit
         }
 
         group.notify(queue: .main) {
+            let totalDistanceMeters = walkingDistanceMeters > 0
+                ? walkingDistanceMeters
+                : workoutDistanceMeters
             var payload: [String: Any] = [
                 "available": true,
                 "date": Self.isoDate(dayStart),
@@ -195,6 +305,7 @@ import HealthKit
                 "basalCalories": basalCalories,
                 "standHours": standHours,
                 "exerciseMinutes": exerciseMinutes,
+                "flightsClimbed": flightsClimbed,
                 "workouts": workouts,
                 "totalDistance": Int(totalDistanceMeters.rounded()),
             ]
@@ -204,6 +315,18 @@ import HealthKit
             }
             if let heartRateDict = heartRateDict {
                 payload["heartRate"] = heartRateDict
+            }
+            if let hrvMs = hrvMs {
+                payload["hrvMs"] = round(hrvMs * 10) / 10
+            }
+            if let spo2Percent = spo2Percent {
+                payload["spo2Percent"] = round(spo2Percent * 10) / 10
+            }
+            if let respiratoryRate = respiratoryRate {
+                payload["respiratoryRate"] = round(respiratoryRate * 10) / 10
+            }
+            if let vo2Max = vo2Max {
+                payload["vo2Max"] = round(vo2Max * 10) / 10
             }
 
             runOnMain {
@@ -231,8 +354,14 @@ import HealthKit
             return HKObjectType.quantityType(forIdentifier: .stepCount)
         case "HKQuantityTypeIdentifierActiveEnergyBurned":
             return HKObjectType.quantityType(forIdentifier: .activeEnergyBurned)
+        case "HKQuantityTypeIdentifierBasalEnergyBurned":
+            return HKObjectType.quantityType(forIdentifier: .basalEnergyBurned)
         case "HKQuantityTypeIdentifierAppleExerciseTime":
             return HKObjectType.quantityType(forIdentifier: .appleExerciseTime)
+        case "HKQuantityTypeIdentifierDistanceWalkingRunning":
+            return HKObjectType.quantityType(forIdentifier: .distanceWalkingRunning)
+        case "HKQuantityTypeIdentifierFlightsClimbed":
+            return HKObjectType.quantityType(forIdentifier: .flightsClimbed)
         case "HKCategoryTypeIdentifierAppleStandHour":
             return HKObjectType.categoryType(forIdentifier: .appleStandHour)
         case "HKCategoryTypeIdentifierSleepAnalysis":
@@ -241,6 +370,16 @@ import HealthKit
             return HKObjectType.quantityType(forIdentifier: .restingHeartRate)
         case "HKQuantityTypeIdentifierHeartRate":
             return HKObjectType.quantityType(forIdentifier: .heartRate)
+        case "HKQuantityTypeIdentifierWalkingHeartRateAverage":
+            return HKObjectType.quantityType(forIdentifier: .walkingHeartRateAverage)
+        case "HKQuantityTypeIdentifierHeartRateVariabilitySDNN":
+            return HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN)
+        case "HKQuantityTypeIdentifierOxygenSaturation":
+            return HKObjectType.quantityType(forIdentifier: .oxygenSaturation)
+        case "HKQuantityTypeIdentifierRespiratoryRate":
+            return HKObjectType.quantityType(forIdentifier: .respiratoryRate)
+        case "HKQuantityTypeIdentifierVO2Max":
+            return HKObjectType.quantityType(forIdentifier: .vo2Max)
         case "HKWorkoutTypeIdentifier":
             return HKObjectType.workoutType()
         default:
@@ -272,6 +411,75 @@ import HealthKit
             }
             let value = result?.sumQuantity()?.doubleValue(for: unit) ?? 0
             completion(value, nil)
+        }
+        store.execute(query)
+    }
+
+    private static func queryAverage(
+        quantityId: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        from start: Date,
+        to end: Date,
+        completion: @escaping (Double?, String?) -> Void
+    ) {
+        guard let type = HKQuantityType.quantityType(forIdentifier: quantityId) else {
+            completion(nil, nil)
+            return
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let query = HKStatisticsQuery(
+            quantityType: type,
+            quantitySamplePredicate: predicate,
+            options: .discreteAverage
+        ) { _, result, error in
+            if let error = error {
+                completion(nil, error.localizedDescription)
+                return
+            }
+            guard let quantity = result?.averageQuantity() else {
+                completion(nil, nil)
+                return
+            }
+            completion(quantity.doubleValue(for: unit), nil)
+        }
+        store.execute(query)
+    }
+
+    private static func queryLatest(
+        quantityId: HKQuantityTypeIdentifier,
+        unit: HKUnit,
+        from start: Date?,
+        to end: Date?,
+        completion: @escaping (Double?, String?) -> Void
+    ) {
+        guard let type = HKQuantityType.quantityType(forIdentifier: quantityId) else {
+            completion(nil, nil)
+            return
+        }
+
+        let predicate: NSPredicate? = {
+            if start != nil || end != nil {
+                return HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+            }
+            return nil
+        }()
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(
+            sampleType: type,
+            predicate: predicate,
+            limit: 1,
+            sortDescriptors: [sort]
+        ) { _, samples, error in
+            if let error = error {
+                completion(nil, error.localizedDescription)
+                return
+            }
+            guard let sample = samples?.first as? HKQuantitySample else {
+                completion(nil, nil)
+                return
+            }
+            completion(sample.quantity.doubleValue(for: unit), nil)
         }
         store.execute(query)
     }
@@ -338,6 +546,7 @@ import HealthKit
             var totalSeconds: TimeInterval = 0
             var deepSeconds: TimeInterval = 0
             var remSeconds: TimeInterval = 0
+            var lightSeconds: TimeInterval = 0
             var wakeUps = 0
 
             for sample in samples {
@@ -346,9 +555,12 @@ import HealthKit
 
                 if #available(iOS 16.0, *) {
                     switch value {
-                    case HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue,
-                         HKCategoryValueSleepAnalysis.asleepCore.rawValue:
+                    case HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue:
                         totalSeconds += duration
+                        lightSeconds += duration
+                    case HKCategoryValueSleepAnalysis.asleepCore.rawValue:
+                        totalSeconds += duration
+                        lightSeconds += duration
                     case HKCategoryValueSleepAnalysis.asleepDeep.rawValue:
                         totalSeconds += duration
                         deepSeconds += duration
@@ -383,6 +595,9 @@ import HealthKit
             }
             if remSeconds > 0 {
                 dict["remSleepHours"] = round(remSeconds / 3600 * 10) / 10
+            }
+            if lightSeconds > 0 {
+                dict["lightSleepHours"] = round(lightSeconds / 3600 * 10) / 10
             }
             completion(dict, nil)
         }
@@ -536,6 +751,8 @@ import HealthKit
     ) {
         var resting: Double?
         var avg: Double?
+        var maxHr: Double?
+        var walkingAvg: Double?
         let group = DispatchGroup()
         var errMsg: String?
 
@@ -564,19 +781,41 @@ import HealthKit
             let statsQuery = HKStatisticsQuery(
                 quantityType: hrType,
                 quantitySamplePredicate: predicate,
-                options: .discreteAverage
+                options: [.discreteAverage, .discreteMax]
             ) { _, result, error in
                 if let error = error { errMsg = error.localizedDescription }
                 if let q = result?.averageQuantity() {
                     avg = q.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+                }
+                if let q = result?.maximumQuantity() {
+                    maxHr = q.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
                 }
                 group.leave()
             }
             store.execute(statsQuery)
         }
 
+        if let walkingType = HKQuantityType.quantityType(forIdentifier: .walkingHeartRateAverage) {
+            group.enter()
+            let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+            let query = HKSampleQuery(
+                sampleType: walkingType,
+                predicate: predicate,
+                limit: 1,
+                sortDescriptors: [sort]
+            ) { _, samples, error in
+                if let error = error { errMsg = error.localizedDescription }
+                if let sample = samples?.first as? HKQuantitySample {
+                    walkingAvg = sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+                }
+                group.leave()
+            }
+            store.execute(query)
+        }
+
         group.notify(queue: .main) {
-            if resting == nil && avg == nil {
+            if resting == nil && avg == nil && maxHr == nil && walkingAvg == nil {
                 completion(nil, errMsg)
                 return
             }
@@ -586,6 +825,12 @@ import HealthKit
             }
             if let avg = avg {
                 dict["avg"] = Int(avg.rounded())
+            }
+            if let maxHr = maxHr {
+                dict["max"] = Int(maxHr.rounded())
+            }
+            if let walkingAvg = walkingAvg {
+                dict["walkingAvg"] = Int(walkingAvg.rounded())
             }
             if dict.isEmpty {
                 completion(nil, errMsg)

@@ -22,12 +22,15 @@ import type {
   WorkoutReadiness,
 } from "@/lib/health/types";
 import { useUserStore } from "@/stores/user";
+import { useHomeStore } from "@/stores/home";
+import { ensureTodaySynced } from "@/lib/healthkit";
 import { closeSplashscreen } from "@/utils/splash";
 import { ensureOnboarded } from "@/utils/onboarding";
-import { HOME_DATA_TTL_MS, isFresh, markFresh } from "@/utils/freshness";
+import { HOME_DATA_TTL_MS, invalidateFresh, markFresh } from "@/utils/freshness";
 import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
 
 const userStore = useUserStore();
+const homeStore = useHomeStore();
 
 const isPageLoading = ref(false);
 const isBriefLoading = ref(false);
@@ -35,6 +38,8 @@ const isFeedbackSubmitting = ref(false);
 const briefError = ref(false);
 const briefErrorMessage = ref("");
 const briefData = ref<MorningBriefData | null>(null);
+/** 当前页面数据所属本地日期 YYYY-MM-DD，用于跨日丢弃内存态 */
+const dataDate = ref<string | null>(null);
 const showModifyPanel = ref(false);
 const modifyNote = ref("");
 const metricsSource = ref<MetricsDataSource>("unknown");
@@ -42,6 +47,30 @@ const qualityScore = ref(0);
 const metricsExpanded = ref(false);
 
 const metrics = ref<TodayHealthMetrics>(createEmptyTodayHealthMetrics());
+
+function localTodayYmd(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** 跨日时丢弃 Pinia / 页面内存中的昨日数据，避免今早仍显示昨天 */
+function discardCrossDayHomeState(uid: string): void {
+  const today = localTodayYmd();
+  const snap = homeStore.snapshot;
+  if (snap && (snap.userId !== uid || snap.date !== today)) {
+    homeStore.clear();
+  }
+  if (dataDate.value && dataDate.value !== today) {
+    briefData.value = null;
+    metrics.value = createEmptyTodayHealthMetrics();
+    metricsSource.value = "unknown";
+    qualityScore.value = 0;
+    dataDate.value = null;
+  }
+}
 
 const metricsSourceLabel = computed(() =>
   formatMetricsSourceLabel(metricsSource.value)
@@ -103,6 +132,8 @@ const showBriefEmpty = computed(
 
 const hasFeedback = computed(() => !!briefData.value?.feedback);
 
+const showSleepMissingTip = computed(() => !!briefData.value?.sleepMissing);
+
 const feedbackDoneLabel = computed(() => {
   const feedback = briefData.value?.feedback;
   if (!feedback) return "已反馈";
@@ -123,10 +154,54 @@ function getWorkoutMeta(readiness?: WorkoutReadiness | null) {
   }
 }
 
+/** 从 Pinia 快照恢复页面展示（Tab 切回时秒开） */
+function hydrateFromHomeStore(uid: string): boolean {
+  const snap = homeStore.readSnapshot(uid);
+  if (!snap) return false;
+  briefData.value = snap.brief;
+  metrics.value = snap.metrics;
+  metricsSource.value = snap.metricsSource;
+  qualityScore.value = snap.qualityScore;
+  dataDate.value = snap.date;
+  return true;
+}
+
+function persistHomeSnapshot(uid: string): void {
+  homeStore.save({
+    userId: uid,
+    brief: briefData.value,
+    metrics: metrics.value,
+    metricsSource: metricsSource.value,
+    qualityScore: qualityScore.value,
+  });
+  dataDate.value = localTodayYmd();
+  markFresh(`home:${uid}`);
+}
+
+/** 静默刷新：只读库缓存，不调用生成简报的 Edge Function */
+async function refreshBriefFromDb(uid: string): Promise<void> {
+  try {
+    const cached = await fetchTodayDailySummary(uid);
+    const fromCache = cached ? toMorningBriefData(cached) : null;
+    if (fromCache) {
+      briefData.value = fromCache;
+    } else if (dataDate.value && dataDate.value !== localTodayYmd()) {
+      briefData.value = null;
+    }
+  } catch (error) {
+    console.warn("[index] 静默刷新简报失败:", error);
+  }
+}
+
 /** 加载晨间简报：优先读缓存，必要时调用 Edge Function */
 async function loadMorningBrief(forceRefresh = false): Promise<void> {
   const uid = userStore.userId;
   if (!uid) return;
+
+  // 非强制刷新且页面/Store 已有简报：不再打网络
+  if (!forceRefresh && briefData.value) {
+    return;
+  }
 
   isBriefLoading.value = true;
   briefError.value = false;
@@ -149,7 +224,12 @@ async function loadMorningBrief(forceRefresh = false): Promise<void> {
     const cached = await fetchTodayDailySummary(uid);
     const fromCache = cached ? toMorningBriefData(cached) : null;
     briefData.value = fromCache
-      ? { ...result, feedback: fromCache.feedback, feedbackNote: fromCache.feedbackNote }
+      ? {
+          ...result,
+          feedback: fromCache.feedback,
+          feedbackNote: fromCache.feedbackNote,
+          sleepMissing: result.sleepMissing ?? fromCache.sleepMissing,
+        }
       : result;
   } catch (error) {
     console.error("[index] 加载晨间简报失败:", error);
@@ -169,7 +249,7 @@ function refreshMorningBrief(): void {
 
 /** 错误态点击重试 */
 function retryMorningBrief(): void {
-  void loadMorningBrief(false);
+  void loadMorningBrief(true);
 }
 
 async function handleFeedback(feedback: BriefFeedback, note?: string): Promise<void> {
@@ -191,6 +271,7 @@ async function handleFeedback(feedback: BriefFeedback, note?: string): Promise<v
       feedback,
       feedbackNote: note?.trim() || null,
     };
+    persistHomeSnapshot(uid);
     showModifyPanel.value = false;
     modifyNote.value = "";
     uni.showToast({ title: "感谢反馈", icon: "success" });
@@ -225,7 +306,7 @@ function onModifyConfirm(): void {
   void handleFeedback("modified", note);
 }
 
-/** 校验登录并加载首页数据（有短时缓存，避免每次 onShow 全量刷新） */
+/** 校验登录并加载首页数据（Store 快照 + TTL，避免 Tab 切回全量刷新） */
 async function ensureAuthAndLoad(options: { force?: boolean } = {}): Promise<void> {
   if (!userStore.isLoggedIn) {
     uni.reLaunch({ url: "/pages/login/index" });
@@ -241,31 +322,53 @@ async function ensureAuthAndLoad(options: { force?: boolean } = {}): Promise<voi
     return;
   }
 
-  const cacheKey = `home:${uid}`;
   const force = options.force === true;
-  const hasCachedView = !!briefData.value;
 
-  if (!force && hasCachedView && isFresh(cacheKey, HOME_DATA_TTL_MS)) {
+  // 跨日先清昨日内存/快照，再同步手机健康数据
+  discardCrossDayHomeState(uid);
+  const syncResult = await ensureTodaySynced({ force });
+  if (syncResult.attempted) {
+    invalidateFresh(`home:${uid}`);
+    homeStore.markStale();
+  }
+
+  const hadView = !!briefData.value;
+  const restored = hydrateFromHomeStore(uid);
+  const hasView = !!briefData.value;
+
+  // TTL 内且已有可展示数据：直接返回，不请求
+  if (!force && hasView && homeStore.isFresh(uid, HOME_DATA_TTL_MS)) {
     return;
   }
 
-  const blocking = !hasCachedView;
-  isPageLoading.value = true;
+  // 有旧快照但已过期：先秒开旧数据，后台静默刷新（无全屏 Loading）
+  const silent = !force && hasView;
+  const blocking = !silent && !hasView;
+
+  if (!silent) {
+    isPageLoading.value = true;
+  }
   if (blocking) {
     showLoading("加载中...");
   }
 
   try {
-    // 先跑晨报（可能写库），再读指标，避免读到被 Mock 覆盖前的瞬时值或竞态
-    await loadMorningBrief(force);
+    if (force) {
+      await loadMorningBrief(true);
+    } else if (!hasView) {
+      await loadMorningBrief(false);
+    } else {
+      // 静默：只读库里的今日简报，不触发生成（省 Edge 调用）
+      await refreshBriefFromDb(uid);
+    }
     const pageData = await fetchHomePageData(uid);
     metrics.value = pageData.metrics;
     metricsSource.value = pageData.metricsSource;
     qualityScore.value = pageData.qualityScore;
-    markFresh(cacheKey);
+    persistHomeSnapshot(uid);
   } catch (error) {
     console.error("[index] 加载首页数据失败:", error);
-    if (blocking || force) {
+    if (blocking || force || (!hadView && !restored)) {
       showErrorToast("数据加载失败，请下拉刷新重试");
     }
   } finally {
@@ -276,9 +379,9 @@ async function ensureAuthAndLoad(options: { force?: boolean } = {}): Promise<voi
   }
 }
 
-/** 进入 AI 对话 */
-function openChat(): void {
-  uni.navigateTo({ url: "/pages/chat/index" });
+/** 进入训练 Tab（底部导航） */
+function openWorkoutPlan(): void {
+  uni.redirectTo({ url: "/pages/workout/plan" });
 }
 
 onReady(() => {
@@ -351,6 +454,7 @@ onShow(() => {
             <view
               class="workout-badge"
               :style="{ backgroundColor: workoutMeta.bg, borderColor: workoutMeta.color }"
+              @tap="openWorkoutPlan"
             >
               <text class="workout-emoji">{{ workoutMeta.emoji }}</text>
               <view class="workout-text">
@@ -360,8 +464,13 @@ onShow(() => {
                 <text class="workout-value" :style="{ color: workoutMeta.color }">
                   {{ workoutMeta.label }}
                 </text>
+                <text class="workout-link" :style="{ color: workoutMeta.color }">查看计划 ›</text>
               </view>
             </view>
+          </view>
+
+          <view v-if="showSleepMissingTip" class="sleep-missing-tip">
+            <text class="sleep-missing-text">睡眠数据缺失，恢复分仅供参考</text>
           </view>
 
           <text class="brief-text">{{ briefData.brief }}</text>
@@ -464,16 +573,6 @@ onShow(() => {
           <text class="metrics-more-arrow">{{ metricsExpanded ? "▲" : "▼" }}</text>
         </view>
       </view>
-
-      <!-- AI 对话入口 -->
-      <button class="chat-btn" @tap="openChat">
-        <text class="chat-btn-icon">💬</text>
-        <view class="chat-btn-text">
-          <text class="chat-btn-title">与 HOP 对话</text>
-          <text class="chat-btn-desc">获取今日健康建议与训练指导</text>
-        </view>
-        <text class="chat-btn-arrow">›</text>
-      </button>
 
       <!-- 底部 Tab 占位 -->
       <view class="tab-placeholder" />
@@ -697,6 +796,26 @@ onShow(() => {
   margin-top: 4rpx;
   font-size: 34rpx;
   font-weight: 700;
+}
+
+.workout-link {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  opacity: 0.9;
+}
+
+.sleep-missing-tip {
+  margin-top: 20rpx;
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+  background-color: #fff7ed;
+  border: 2rpx solid #fed7aa;
+}
+
+.sleep-missing-text {
+  font-size: 24rpx;
+  color: #c2410c;
+  line-height: 1.4;
 }
 
 .brief-text {
@@ -936,52 +1055,6 @@ onShow(() => {
   width: 2rpx;
   height: 64rpx;
   background-color: #e2e8f0;
-}
-
-.chat-btn {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  background-color: #0d9488;
-  border-radius: 24rpx;
-  padding: 28rpx 32rpx;
-  margin-bottom: 24rpx;
-  border: none;
-  box-shadow: 0 8rpx 24rpx rgba(13, 148, 136, 0.25);
-}
-
-.chat-btn::after {
-  border: none;
-}
-
-.chat-btn-icon {
-  font-size: 40rpx;
-  margin-right: 20rpx;
-}
-
-.chat-btn-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.chat-btn-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.chat-btn-desc {
-  margin-top: 4rpx;
-  font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.chat-btn-arrow {
-  font-size: 40rpx;
-  color: #ffffff;
-  font-weight: 300;
 }
 
 .tab-placeholder {

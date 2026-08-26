@@ -8,12 +8,15 @@ export type HealthKitSleepData = {
   totalHours: number
   deepSleepHours?: number
   remSleepHours?: number
+  lightSleepHours?: number
   wakeUps?: number
 }
 
 export type HealthKitHeartRateData = {
   resting: number | null
   avg?: number | null
+  max?: number | null
+  walkingAvg?: number | null
 }
 
 export type HealthKitWorkoutRecord = {
@@ -36,8 +39,13 @@ export type HealthKitTodayPayload = {
   basalCalories: number
   standHours: number
   exerciseMinutes: number
+  flightsClimbed?: number
   sleep: HealthKitSleepData | null
   heartRate: HealthKitHeartRateData | null
+  hrvMs?: number
+  spo2Percent?: number
+  respiratoryRate?: number
+  vo2Max?: number
   workouts: HealthKitWorkoutRecord[]
   totalDistance: number
   error?: string

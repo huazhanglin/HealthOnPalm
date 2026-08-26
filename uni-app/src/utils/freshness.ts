@@ -28,6 +28,6 @@ export function invalidateFreshByPrefix(prefix: string): void {
 }
 
 /** 常用 TTL */
-export const HOME_DATA_TTL_MS = 90 * 1000;
+export const HOME_DATA_TTL_MS = 5 * 60 * 1000;
 export const PROFILE_DATA_TTL_MS = 2 * 60 * 1000;
 export const HISTORY_DATA_TTL_MS = 60 * 1000;

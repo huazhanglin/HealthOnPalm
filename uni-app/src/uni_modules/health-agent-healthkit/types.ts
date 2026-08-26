@@ -3,6 +3,7 @@ export interface HealthKitSleepData {
   totalHours: number;
   deepSleepHours?: number;
   remSleepHours?: number;
+  lightSleepHours?: number;
   wakeUps?: number;
 }
 
@@ -10,6 +11,8 @@ export interface HealthKitSleepData {
 export interface HealthKitHeartRateData {
   resting: number | null;
   avg?: number | null;
+  max?: number | null;
+  walkingAvg?: number | null;
 }
 
 /** 今日 HealthKit 聚合数据 */
@@ -21,8 +24,13 @@ export interface HealthKitTodayPayload {
   basalCalories?: number;
   standHours: number;
   exerciseMinutes: number;
+  flightsClimbed?: number;
   sleep: HealthKitSleepData | null;
   heartRate: HealthKitHeartRateData | null;
+  hrvMs?: number | null;
+  spo2Percent?: number | null;
+  respiratoryRate?: number | null;
+  vo2Max?: number | null;
   workouts?: HKWorkoutRecord[];
   totalDistance?: number;
   error?: string;

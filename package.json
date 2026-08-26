@@ -10,10 +10,13 @@
     "supabase:serve": "supabase functions serve mock-health-data --env-file supabase/.env",
     "supabase:deploy": "supabase functions deploy mock-health-data --project-ref zewznptbyhurxaqirzmb",
     "supabase:deploy:brief": "supabase functions deploy morning-brief recovery-score mock-health-data --project-ref zewznptbyhurxaqirzmb",
-    "supabase:deploy:agent": "supabase functions deploy query-agent memory-working morning-brief safety-check recovery-score mock-health-data --project-ref zewznptbyhurxaqirzmb",
+    "supabase:deploy:agent": "supabase functions deploy query-agent memory-working morning-brief safety-check recovery-score workout-agent mock-health-data --project-ref zewznptbyhurxaqirzmb",
+    "supabase:deploy:workout": "supabase functions deploy workout-agent --project-ref zewznptbyhurxaqirzmb",
     "supabase:check:llm": "node supabase/scripts/check-llm.mjs",
     "supabase:test:safety": "node supabase/scripts/test-safety.mjs",
-    "supabase:test:mock": "node supabase/functions/mock-health-data/test-local.mjs"
+    "supabase:test:mock": "node supabase/functions/mock-health-data/test-local.mjs",
+    "exercises:sync": "node supabase/scripts/sync-exercises.mjs --all --featured=160",
+    "exercises:upload": "node supabase/scripts/sync-exercises.mjs --all --featured=160 --upload"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

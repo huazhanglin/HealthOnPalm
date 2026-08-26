@@ -26,6 +26,20 @@ export interface TodayHealthMetrics {
   restingHeartRate: number | null;
   /** 平均心率 */
   avgHeartRate: number | null;
+  /** 最高心率 */
+  maxHeartRate: number | null;
+  /** 步行平均心率 */
+  walkingHeartRateAvg: number | null;
+  /** 心率变异 SDNN（毫秒） */
+  hrvMs: number | null;
+  /** 血氧（%） */
+  spo2Percent: number | null;
+  /** 呼吸频率（次/分） */
+  respiratoryRate: number | null;
+  /** 爬楼层数 */
+  flightsClimbed: number | null;
+  /** VO2 Max */
+  vo2Max: number | null;
   /** 今日运动次数 */
   totalWorkouts: number | null;
   /** 总距离（米） */
@@ -57,6 +71,8 @@ export interface MorningBriefData {
   dataSource?: MetricsDataSource | null;
   /** 数据质量分 0-100 */
   qualityScore?: number | null;
+  /** 无真实睡眠时，恢复分仅供参考 */
+  sleepMissing?: boolean | null;
 }
 
 /** daily_summaries 今日简报缓存 */
@@ -66,6 +82,7 @@ export interface DailySummaryBrief {
   workoutReadiness: WorkoutReadiness | null;
   feedback?: BriefFeedback | null;
   feedbackNote?: string | null;
+  sleepMissing?: boolean | null;
 }
 
 /** 首页数据加载结果 */

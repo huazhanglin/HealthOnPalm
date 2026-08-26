@@ -7,6 +7,7 @@ import {
   clearHealthKitSetup,
   diagnostics,
   ensureHealthKitAuthState,
+  ensureTodaySynced,
   formatLastSyncTime,
   getLastSyncTime,
   getTodayHealthData,
@@ -15,6 +16,7 @@ import {
   isIosAppPlatform,
   isPluginMissingFromBase,
   markHealthKitSetupComplete,
+  needsTodaySync,
   syncTodayDataWithUpload,
   type HealthKitTodayPayload,
 } from "@/lib/healthkit";
@@ -37,11 +39,12 @@ function bumpHomeDataFreshness(): void {
 }
 
 const DATA_TYPES: DataTypeItem[] = [
-  { icon: "👣", label: "步数", desc: "了解日常活动量" },
-  { icon: "😴", label: "睡眠", desc: "评估恢复与作息" },
-  { icon: "❤️", label: "心率", desc: "辅助恢复分计算" },
-  { icon: "🔥", label: "活动卡路里", desc: "衡量运动消耗" },
-  { icon: "🧍", label: "站立时长", desc: "久坐提醒与活动平衡" },
+  { icon: "👣", label: "步数与距离", desc: "步数、步行跑步距离、爬楼" },
+  { icon: "😴", label: "睡眠", desc: "总时长、深睡、浅睡、REM" },
+  { icon: "❤️", label: "心率", desc: "静息、平均、最高、步行心率" },
+  { icon: "💓", label: "恢复指标", desc: "心率变异、血氧、呼吸、VO₂ Max" },
+  { icon: "🔥", label: "能量消耗", desc: "活动卡路里与基础代谢" },
+  { icon: "🏋️", label: "运动记录", desc: "锻炼分钟与各类 Workout" },
 ];
 
 const pageStatus = ref<PageStatus>("guide");
@@ -81,9 +84,26 @@ const previewMetrics = computed(() => {
       unit: "kcal",
     },
     {
-      label: "站立时长",
-      value: formatNumber(data.standHours),
-      unit: "小时",
+      label: "基础代谢",
+      value: formatNumber(data.basalCalories),
+      unit: "kcal",
+    },
+    {
+      label: "步行距离",
+      value: data.totalDistance != null && data.totalDistance > 0
+        ? (data.totalDistance / 1000).toFixed(2)
+        : "--",
+      unit: "km",
+    },
+    {
+      label: "心率变异",
+      value: data.hrvMs != null ? data.hrvMs.toFixed(1) : "--",
+      unit: "ms",
+    },
+    {
+      label: "血氧",
+      value: data.spo2Percent != null ? data.spo2Percent.toFixed(1) : "--",
+      unit: "%",
     },
   ];
 });
@@ -265,6 +285,29 @@ onShow(async () => {
   }
   loadSyncState();
   await restoreAuthorizedState();
+
+  // 已授权且超过半小时/跨日：进入本页时自动同步
+  if (
+    pageStatus.value === "success" &&
+    isHealthKitSetupComplete() &&
+    needsTodaySync()
+  ) {
+    isRefreshing.value = true;
+    errorMessage.value = "";
+    try {
+      const result = await ensureTodaySynced({ force: true });
+      todayData.value = await getTodayHealthData();
+      lastSyncAt.value = getLastSyncTime();
+      bumpHomeDataFreshness();
+      if (result.attempted && !result.uploaded && result.error) {
+        errorMessage.value = `设备数据已读取，云端同步失败：${result.error}`;
+      }
+    } catch (error) {
+      console.warn("[healthkit/authorize] 自动同步失败:", error);
+    } finally {
+      isRefreshing.value = false;
+    }
+  }
 });
 </script>
 

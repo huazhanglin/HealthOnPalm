@@ -1,0 +1,195 @@
+/* 全书 PDF：书籍版式（A5 感的 A4 排版） */
+
+@page {
+  size: A4;
+  margin: 22mm 20mm 24mm 22mm;
+}
+
+html,
+body {
+  font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun",
+    "Microsoft YaHei", serif;
+  font-size: 11pt;
+  line-height: 1.8;
+  color: #1c1917;
+  max-width: 100%;
+  text-align: justify;
+  hyphens: auto;
+}
+
+/* 封面 */
+.title-page {
+  page-break-after: always;
+  text-align: center;
+  padding-top: 28vh;
+}
+
+.title-page .book-title {
+  font-size: 26pt;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  color: #1c1917;
+  border: none;
+  margin: 0 1.5em 0.6em;
+  padding: 0;
+}
+
+.title-page .book-subtitle {
+  font-size: 13pt;
+  color: #57534e;
+  margin: 0 2em 3em;
+  line-height: 1.6;
+}
+
+.title-page .book-meta {
+  font-size: 11pt;
+  color: #78716c;
+  line-height: 2;
+}
+
+.title-page .book-meta p {
+  margin: 0;
+}
+
+/* 一级：序言 / 目录 / 章名 / 后记 — 新开页 */
+h1 {
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  font-size: 20pt;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #1c1917;
+  text-align: left;
+  border-bottom: 1px solid #d6d3d1;
+  padding-bottom: 10px;
+  margin: 0 0 1.2em;
+  page-break-before: auto;
+  page-break-after: avoid;
+}
+
+.title-page h1,
+h1.no-break {
+  page-break-before: auto;
+  border: none;
+}
+
+h2 {
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  font-size: 14pt;
+  font-weight: 700;
+  color: #292524;
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+  page-break-after: avoid;
+}
+
+h3,
+h4 {
+  font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  font-size: 12pt;
+  font-weight: 700;
+  color: #44403c;
+  margin-top: 1.4em;
+  page-break-after: avoid;
+}
+
+p {
+  margin: 0.7em 0;
+}
+
+blockquote {
+  border-left: 3px solid #a8a29e;
+  background: #fafaf9;
+  margin: 1.1em 0;
+  padding: 8px 16px;
+  color: #44403c;
+  font-size: 10.5pt;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 14px 0 18px;
+  font-size: 9.5pt;
+  line-height: 1.5;
+  page-break-inside: avoid;
+  text-align: left;
+}
+
+th,
+td {
+  border: 1px solid #d6d3d1;
+  padding: 6px 8px;
+  vertical-align: top;
+}
+
+th {
+  background: #f5f5f4;
+  font-weight: 700;
+}
+
+pre {
+  background: #f5f5f4;
+  border: 1px solid #e7e5e4;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 8.5pt;
+  line-height: 1.45;
+  page-break-inside: avoid;
+  text-align: left;
+}
+
+code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.9em;
+  background: #f5f5f4;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #e7e5e4;
+  margin: 2em 0;
+}
+
+ul,
+ol {
+  padding-left: 1.5em;
+  margin: 0.6em 0 1em;
+}
+
+li {
+  margin: 0.25em 0;
+}
+
+a {
+  color: #1c1917;
+  text-decoration: none;
+}
+
+.toc-block {
+  page-break-after: always;
+}
+
+.toc-block ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.toc-block li {
+  margin: 0.35em 0;
+}
+
+.page-break {
+  page-break-after: always;
+  break-after: page;
+  height: 0;
+  margin: 0;
+  border: none;
+}

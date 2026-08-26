@@ -29,12 +29,20 @@ interface HealthKitSyncPayload {
   basalCalories?: number
   standHours?: number
   exerciseMinutes?: number
+  flightsClimbed?: number | null
   sleepHours?: number | null
   deepSleepHours?: number | null
   remSleepHours?: number | null
+  lightSleepHours?: number | null
   wakeUps?: number | null
   restingHeartRate?: number | null
   avgHeartRate?: number | null
+  maxHeartRate?: number | null
+  walkingHeartRateAvg?: number | null
+  hrvMs?: number | null
+  spo2Percent?: number | null
+  respiratoryRate?: number | null
+  vo2Max?: number | null
   source?: string
   workouts?: WorkoutRecord[]
   totalDistance?: number
@@ -43,11 +51,14 @@ interface HealthKitSyncPayload {
     totalHours?: number
     deepSleepHours?: number
     remSleepHours?: number
+    lightSleepHours?: number
     wakeUps?: number
   }
   heartRate?: {
     resting?: number | null
     avg?: number | null
+    max?: number | null
+    walkingAvg?: number | null
   }
 }
 
@@ -86,7 +97,13 @@ Deno.serve(async (req) => {
     }
 
     const payload = (await req.json()) as HealthKitSyncPayload
-    const today = payload.date || new Date().toISOString().slice(0, 10)
+    const shanghaiToday = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date())
+    const today = payload.date || shanghaiToday
     const workouts = Array.isArray(payload.workouts) ? payload.workouts : []
     const totalDistance = Math.round(payload.totalDistance ?? 0)
 
@@ -96,11 +113,17 @@ Deno.serve(async (req) => {
       payload.deepSleepHours ?? payload.sleep?.deepSleepHours ?? null
     const remSleepHours =
       payload.remSleepHours ?? payload.sleep?.remSleepHours ?? null
+    const lightSleepHours =
+      payload.lightSleepHours ?? payload.sleep?.lightSleepHours ?? null
     const wakeUps = payload.wakeUps ?? payload.sleep?.wakeUps ?? null
     const restingHeartRate =
       payload.restingHeartRate ?? payload.heartRate?.resting ?? null
     const avgHeartRate =
       payload.avgHeartRate ?? payload.heartRate?.avg ?? null
+    const maxHeartRate =
+      payload.maxHeartRate ?? payload.heartRate?.max ?? null
+    const walkingHeartRateAvg =
+      payload.walkingHeartRateAvg ?? payload.heartRate?.walkingAvg ?? null
 
     const syncedTypes: string[] = []
 
@@ -116,6 +139,13 @@ Deno.serve(async (req) => {
         exercise_minutes: payload.exerciseMinutes ?? 0,
         resting_heart_rate: restingHeartRate,
         avg_heart_rate: avgHeartRate,
+        max_heart_rate: maxHeartRate,
+        walking_hr_avg: walkingHeartRateAvg,
+        hrv_ms: payload.hrvMs ?? null,
+        spo2_percent: payload.spo2Percent ?? null,
+        respiratory_rate: payload.respiratoryRate ?? null,
+        flights_climbed: payload.flightsClimbed ?? null,
+        vo2_max: payload.vo2Max ?? null,
         total_workouts: workouts.length,
         total_distance_meters: totalDistance,
         has_workout: workouts.length > 0,
@@ -140,6 +170,7 @@ Deno.serve(async (req) => {
           total_sleep_hours: sleepHours,
           deep_sleep_hours: deepSleepHours,
           rem_sleep_hours: remSleepHours,
+          light_sleep_hours: lightSleepHours,
           wake_ups: wakeUps ?? 0,
           source: 'healthkit_sync',
         },
@@ -164,6 +195,7 @@ Deno.serve(async (req) => {
               total_sleep_hours: sleepHours,
               deep_sleep_hours: deepSleepHours,
               rem_sleep_hours: remSleepHours,
+              light_sleep_hours: lightSleepHours,
               wake_ups: wakeUps ?? 0,
               source: 'healthkit_sync',
             })
@@ -175,6 +207,7 @@ Deno.serve(async (req) => {
             total_sleep_hours: sleepHours,
             deep_sleep_hours: deepSleepHours,
             rem_sleep_hours: remSleepHours,
+            light_sleep_hours: lightSleepHours,
             wake_ups: wakeUps ?? 0,
             source: 'healthkit_sync',
           })

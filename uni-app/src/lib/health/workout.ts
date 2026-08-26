@@ -1,29 +1,81 @@
 import type { WorkoutLog } from "@/types/database";
 
-/** 手动记录可选的运动类型 */
+/** 手动记录可选的运动类型（与 HealthKit 常见类型对齐，便于展示一致） */
 export type ManualWorkoutType =
   | "running"
   | "walking"
-  | "strength"
-  | "yoga"
   | "cycling"
-  | "hiit";
+  | "hiking"
+  | "swimming"
+  | "strength"
+  | "hiit"
+  | "yoga"
+  | "pilates"
+  | "badminton"
+  | "table_tennis"
+  | "basketball"
+  | "tennis"
+  | "volleyball"
+  | "soccer"
+  | "dance"
+  | "rowing"
+  | "elliptical"
+  | "other";
+
+export type WorkoutTypeCategory = "cardio" | "strength_flex" | "ball" | "other";
 
 export interface WorkoutTypeOption {
   value: ManualWorkoutType;
   label: string;
   icon: string;
+  category: WorkoutTypeCategory;
 }
 
+export const WORKOUT_TYPE_CATEGORY_LABELS: Record<WorkoutTypeCategory, string> = {
+  cardio: "有氧 / 户外",
+  strength_flex: "力量 / 柔韧",
+  ball: "球类",
+  other: "其他",
+};
+
 export const WORKOUT_TYPE_OPTIONS: WorkoutTypeOption[] = [
-  { value: "running", label: "跑步", icon: "🏃" },
-  { value: "walking", label: "步行", icon: "🚶" },
-  { value: "strength", label: "力量训练", icon: "🏋️" },
-  { value: "yoga", label: "瑜伽/拉伸", icon: "🧘" },
-  { value: "cycling", label: "骑行", icon: "🚴" },
-  { value: "hiit", label: "HIIT", icon: "⚡" },
+  { value: "running", label: "跑步", icon: "🏃", category: "cardio" },
+  { value: "walking", label: "步行", icon: "🚶", category: "cardio" },
+  { value: "cycling", label: "骑行", icon: "🚴", category: "cardio" },
+  { value: "hiking", label: "徒步", icon: "🥾", category: "cardio" },
+  { value: "swimming", label: "游泳", icon: "🏊", category: "cardio" },
+  { value: "elliptical", label: "椭圆机", icon: "⭕", category: "cardio" },
+  { value: "rowing", label: "划船机", icon: "🛶", category: "cardio" },
+
+  { value: "strength", label: "力量训练", icon: "🏋️", category: "strength_flex" },
+  { value: "hiit", label: "HIIT", icon: "⚡", category: "strength_flex" },
+  { value: "yoga", label: "瑜伽/拉伸", icon: "🧘", category: "strength_flex" },
+  { value: "pilates", label: "普拉提", icon: "🤸", category: "strength_flex" },
+  { value: "dance", label: "舞蹈", icon: "💃", category: "strength_flex" },
+
+  { value: "badminton", label: "羽毛球", icon: "🏸", category: "ball" },
+  { value: "table_tennis", label: "乒乓球", icon: "🏓", category: "ball" },
+  { value: "basketball", label: "篮球", icon: "🏀", category: "ball" },
+  { value: "tennis", label: "网球", icon: "🎾", category: "ball" },
+  { value: "volleyball", label: "排球", icon: "🏐", category: "ball" },
+  { value: "soccer", label: "足球", icon: "⚽", category: "ball" },
+
+  { value: "other", label: "其他", icon: "🏅", category: "other" },
 ];
 
+/** 按分类分组，供记录页分区展示 */
+export function getWorkoutTypesByCategory(): Array<{
+  category: WorkoutTypeCategory;
+  label: string;
+  items: WorkoutTypeOption[];
+}> {
+  const order: WorkoutTypeCategory[] = ["cardio", "strength_flex", "ball", "other"];
+  return order.map((category) => ({
+    category,
+    label: WORKOUT_TYPE_CATEGORY_LABELS[category],
+    items: WORKOUT_TYPE_OPTIONS.filter((item) => item.category === category),
+  }));
+}
 export const DURATION_PRESETS = [15, 30, 45, 60] as const;
 
 /** 手动记录表单 */
@@ -33,6 +85,11 @@ export interface WorkoutLogForm {
   durationMinutes: number;
   perceivedExertion: number;
   notes: string;
+  /** 关联动作库 id（来自今日计划打卡） */
+  exerciseIds?: string[];
+  /** 覆盖展示名 */
+  workoutName?: string;
+  source?: "user_logged" | "ai_suggested";
 }
 
 /** 创建默认表单（默认今天、30 分钟、疲劳度 5） */
