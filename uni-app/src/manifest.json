@@ -2,8 +2,8 @@
     "name" : "Health On Palm",
     "appid" : "__UNI__1A1BD81",
     "description" : "Health On Palm (HOP) — 掌上健康智能体",
-    "versionName" : "0.3.8",
-    "versionCode" : 138,
+    "versionName" : "0.3.9",
+    "versionCode" : 139,
     "transformPx" : false,
     "app-plus" : {
         "usingComponents" : true,

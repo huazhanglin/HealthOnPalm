@@ -380,11 +380,19 @@ export type {
   BriefFeedback,
   DailySummaryBrief,
   HomePageData,
+  HomeSnapshot,
   MetricsDataSource,
   MorningBriefData,
   TodayHealthMetrics,
   WorkoutReadiness,
 } from "@/lib/health/types";
+
+export {
+  HOME_SNAPSHOT_STORAGE_KEY,
+  clearPersistedHomeSnapshot,
+  readPersistedHomeSnapshot,
+  writePersistedHomeSnapshot,
+} from "@/lib/health/home-snapshot";
 
 export {
   getBriefFeedbackLabel,
@@ -414,12 +422,15 @@ export {
   intensitiesForReadiness,
   listExercises,
   pickPlanCandidates,
+  resolveExerciseDemoUrl,
   resolveExerciseDescription,
 } from "@/lib/health/exercises";
 
 export type { Exercise, ExerciseQuery } from "@/lib/health/exercises";
 
 export {
+  enrichWorkoutPlanMedia,
+  fetchTodayCachedWorkoutPlan,
   flattenPlanExerciseIds,
   formatPlanItemTitle,
   readinessLabel,

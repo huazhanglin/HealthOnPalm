@@ -3,7 +3,6 @@ import { onHide, onShow, onUnload } from "@dcloudio/uni-app";
 import { storeToRefs } from "pinia";
 import { computed, onUnmounted, ref } from "vue";
 import { HaButton, HaLoading } from "@/components/common";
-import HomeTabBar from "@/components/HomeTabBar.vue";
 import {
   cancelVoiceRecording,
   playSpeechForMessage,
@@ -21,6 +20,7 @@ import { ensureOnboarded } from "@/utils/onboarding";
 import { showErrorToast } from "@/utils/storage";
 
 const userStore = useUserStore();
+userStore.hydrateFromStorageSync();
 const chatStore = useChatStore();
 
 const {
@@ -131,17 +131,20 @@ function onMicTouchCancel(): void {
   }
 }
 
-/** 页面鉴权并加载历史 */
+/** 页面鉴权并加载历史（历史不阻塞首屏） */
 async function initPage(): Promise<void> {
+  if (!userStore.isLoggedIn) {
+    userStore.hydrateFromStorageSync();
+  }
   if (!userStore.isLoggedIn) {
     uni.reLaunch({ url: "/pages/login/index" });
     return;
   }
 
+  void chatStore.loadHistory();
+
   const onboarded = await ensureOnboarded();
   if (!onboarded) return;
-
-  await chatStore.loadHistory();
 }
 
 onShow(() => {
@@ -301,8 +304,6 @@ onUnmounted(() => {
     <view v-if="voiceState === 'recording'" class="voice-overlay">
       <text class="voice-overlay-text">正在聆听，松开发送识别</text>
     </view>
-
-    <HomeTabBar active="chat" />
   </view>
 </template>
 
@@ -508,7 +509,6 @@ onUnmounted(() => {
   align-items: flex-end;
   gap: 16rpx;
   padding: 16rpx 24rpx;
-  margin-bottom: calc(110rpx + env(safe-area-inset-bottom));
   background-color: #ffffff;
   border-top: 2rpx solid #e2e8f0;
   box-sizing: border-box;

@@ -15,6 +15,21 @@
       }
     },
     {
+      "path": "pages/chat/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "助手",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
+      "path": "pages/workout/plan",
+      "style": {
+        "navigationBarTitleText": "训练",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
+    },
+    {
       "path": "pages/records/index",
       "style": {
         "navigationBarTitleText": "记录",
@@ -25,14 +40,6 @@
       "path": "pages/profile/index",
       "style": {
         "navigationBarTitleText": "我的档案",
-        "navigationBarBackgroundColor": "#FFFFFF"
-      }
-    },
-    {
-      "path": "pages/chat/index",
-      "style": {
-        "navigationStyle": "custom",
-        "navigationBarTitleText": "助手",
         "navigationBarBackgroundColor": "#FFFFFF"
       }
     },
@@ -55,13 +62,6 @@
       "path": "pages/workout/log",
       "style": {
         "navigationBarTitleText": "记录运动",
-        "navigationBarBackgroundColor": "#FFFFFF"
-      }
-    },
-    {
-      "path": "pages/workout/plan",
-      "style": {
-        "navigationBarTitleText": "训练",
         "navigationBarBackgroundColor": "#FFFFFF"
       }
     },
@@ -106,6 +106,44 @@
     "navigationBarTitleText": "Health On Palm",
     "navigationBarBackgroundColor": "#FFFFFF",
     "backgroundColor": "#F8FAFC"
+  },
+  "tabBar": {
+    "color": "#94a3b8",
+    "selectedColor": "#0d9488",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/chat/index",
+        "text": "助手",
+        "iconPath": "static/tab/chat.png",
+        "selectedIconPath": "static/tab/chat-active.png"
+      },
+      {
+        "pagePath": "pages/workout/plan",
+        "text": "训练",
+        "iconPath": "static/tab/train.png",
+        "selectedIconPath": "static/tab/train-active.png"
+      },
+      {
+        "pagePath": "pages/records/index",
+        "text": "记录",
+        "iconPath": "static/tab/records.png",
+        "selectedIconPath": "static/tab/records-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/tab/profile.png",
+        "selectedIconPath": "static/tab/profile-active.png"
+      }
+    ]
   },
   "easycom": {
     "autoscan": true,

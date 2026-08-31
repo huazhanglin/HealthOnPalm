@@ -14,6 +14,7 @@ import {
 } from "@/lib/health/workout";
 import { ensureOnboarded } from "@/utils/onboarding";
 import { invalidateFresh } from "@/utils/freshness";
+import { switchToTab } from "@/utils/tab";
 import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
 import { useUserStore } from "@/stores/user";
 
@@ -93,7 +94,7 @@ function openHistory(): void {
 }
 
 function openAiSuggestion(): void {
-  uni.redirectTo({ url: "/pages/workout/plan" });
+  switchToTab("/pages/workout/plan");
 }
 
 onShow(async () => {

@@ -12,7 +12,7 @@ import {
 import type { User } from "@/types/database";
 import { useHomeStore } from "@/stores/home";
 import { isValidEmail, isValidPassword } from "@/utils/email";
-import { setStorageJson, uniAuthStorage } from "@/utils/storage";
+import { getStorageJson, setStorageJson, uniAuthStorage } from "@/utils/storage";
 
 /** 将 Supabase 错误映射为中文提示 */
 function toAuthError(error: { message: string; code?: string }): AuthErrorInfo {
@@ -114,6 +114,20 @@ export const useUserStore = defineStore("user", () => {
     phone.value = stored.phone ?? null;
   }
 
+  /**
+   * 同步读本地 token，立刻认已登录（不打网络）。
+   * 启动页据此直接进首页，避免先画出登录表单。
+   */
+  function hydrateFromStorageSync(): boolean {
+    if (userId.value) return true;
+    const stored = getStorageJson<StoredAuthSession>(AUTH_STORAGE_KEY);
+    if (!stored?.userId || !stored.accessToken || !stored.refreshToken) {
+      return false;
+    }
+    applyStoredSession(stored);
+    return true;
+  }
+
   /** 从本地存储恢复会话（必要时自动 refresh） */
   async function restoreSession(): Promise<void> {
     try {
@@ -174,6 +188,12 @@ export const useUserStore = defineStore("user", () => {
     userId.value = null;
     profile.value = null;
     useHomeStore().clear();
+    void import("@/stores/chat").then(({ useChatStore }) => {
+      useChatStore().reset();
+    });
+    void import("@/stores/workout").then(({ useWorkoutStore }) => {
+      useWorkoutStore().reset();
+    });
   }
 
   /** 邮箱注册并登录（Confirm email 关闭时可直接进会话） */
@@ -284,6 +304,7 @@ export const useUserStore = defineStore("user", () => {
     sessionRestored,
     isLoggedIn,
     markSessionRestored,
+    hydrateFromStorageSync,
     restoreSession,
     fetchProfile,
     register,

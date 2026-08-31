@@ -202,6 +202,7 @@ function scoreExercise(item, translation) {
       }
     }
   }
+  if ((item.images || []).some((i) => /\.gif(\?|#|$)/i.test(i.image || ""))) score += 20;
   if ((item.images || []).length > 0) score += 25;
   if (stripHtml(translation?.description || "").length > 80) score += 15;
   if ((item.muscles || []).length > 0) score += 10;
@@ -226,7 +227,9 @@ function toRow(item, { isFeatured = false } = {}) {
     equipmentEn.some((e) => /none|bodyweight/i.test(e));
   const phase = inferPhase(category, nameEn, equipmentEn);
   const intensity = inferIntensity(category, nameEn, phase);
-  const mainImage = (item.images || []).find((i) => i.is_main) || (item.images || [])[0];
+  const images = item.images || [];
+  const gif = images.find((i) => /\.gif(\?|#|$)/i.test(i.image || ""));
+  const mainImage = gif || images.find((i) => i.is_main) || images[0];
   const license = item.license || {};
   const licenseShort = license.short_name || "CC-BY-SA-4.0";
   const licenseUrl =

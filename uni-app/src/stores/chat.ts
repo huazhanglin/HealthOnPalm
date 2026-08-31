@@ -1,6 +1,13 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { agentApi } from "@/api/agent";
+import { fetchTodayConversationMessages } from "@/lib/chat/history";
+import {
+  clearPersistedChatSnapshot,
+  fromStoredChatMessages,
+  readPersistedChatSnapshot,
+  writePersistedChatSnapshot,
+} from "@/lib/chat/history-cache";
 import { useUserStore } from "@/stores/user";
 import {
   CHAT_INPUT_MAX_LENGTH,
@@ -10,6 +17,13 @@ import {
   type ChatMessageRole,
 } from "@/types/chat";
 import { HaToast } from "@/components/common";
+import {
+  CHAT_HISTORY_TTL_MS,
+  isFresh as isStampFresh,
+  markFresh,
+} from "@/utils/freshness";
+
+let historyRefreshInFlight: Promise<void> | null = null;
 
 /** 生成消息 ID */
 function createMessageId(): string {
@@ -25,6 +39,14 @@ function createMessage(role: ChatMessageRole, content: string): ChatMessage {
     displayContent: content,
     timestamp: new Date().toISOString(),
   };
+}
+
+function isWelcomeOnly(list: ChatMessage[]): boolean {
+  return (
+    list.length === 1 &&
+    list[0]?.role === "assistant" &&
+    list[0]?.content === WELCOME_MESSAGE
+  );
 }
 
 /** 格式化时间分隔标签 */
@@ -67,6 +89,12 @@ export const useChatStore = defineStore("chat", () => {
 
   const inputLength = computed(() => inputText.value.length);
 
+  function persistIfNeeded(userId: string): void {
+    if (isWelcomeOnly(messages.value)) return;
+    writePersistedChatSnapshot(userId, messages.value);
+    markFresh(`chat:${userId}`);
+  }
+
   /** 滚动到最新消息 */
   function scrollToBottom(): void {
     const last = messages.value[messages.value.length - 1];
@@ -75,58 +103,83 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
-  /** 打字机效果 */
-  async function typewriter(messageId: string, fullText: string): Promise<void> {
-    const target = messages.value.find((item) => item.id === messageId);
-    if (!target) return;
-
-    target.isTyping = true;
-    target.displayContent = "";
-
-    for (let i = 0; i < fullText.length; i += 1) {
-      target.displayContent = fullText.slice(0, i + 1);
-      scrollToBottom();
-      await new Promise((resolve) => setTimeout(resolve, 18));
-    }
-
-    target.content = fullText;
-    target.displayContent = fullText;
-    target.isTyping = false;
+  function applyHydratedMessages(list: ChatMessage[]): void {
+    messages.value = list;
+    hasInitialized.value = true;
+    scrollToBottom();
   }
 
-  /** 加载历史对话（memory-working read） */
+  /** 先画欢迎语或本地记录，不挡首屏 */
+  function hydrateLocal(userId: string): void {
+    if (messages.value.length > 0) {
+      hasInitialized.value = true;
+      return;
+    }
+
+    const stored = readPersistedChatSnapshot(userId);
+    if (stored && stored.messages.length > 0) {
+      applyHydratedMessages(fromStoredChatMessages(stored.messages));
+      if (
+        stored.updatedAt > 0 &&
+        Date.now() - stored.updatedAt < CHAT_HISTORY_TTL_MS
+      ) {
+        markFresh(`chat:${userId}`);
+      }
+      return;
+    }
+
+    applyHydratedMessages([createMessage("assistant", WELCOME_MESSAGE)]);
+  }
+
+  async function refreshHistoryFromNetwork(userId: string): Promise<void> {
+    const remote = await fetchTodayConversationMessages(userId);
+    if (isSending.value) return;
+
+    if (remote.length === 0) {
+      markFresh(`chat:${userId}`);
+      return;
+    }
+
+    const localUserCount = messages.value.filter((item) => item.role === "user").length;
+    const remoteUserCount = remote.filter((item) => item.role === "user").length;
+    if (localUserCount > remoteUserCount) return;
+
+    messages.value = remote.map((item) => ({
+      id: createMessageId(),
+      role: item.role,
+      content: item.content,
+      displayContent: item.content,
+      timestamp: item.timestamp || new Date().toISOString(),
+    }));
+    persistIfNeeded(userId);
+    scrollToBottom();
+  }
+
+  /** 加载历史：本地秒开，后台直读 conversations */
   async function loadHistory(): Promise<void> {
     const userStore = useUserStore();
     const userId = userStore.userId;
-    if (!userId || hasInitialized.value) return;
+    if (!userId) return;
 
-    isLoadingHistory.value = true;
+    hydrateLocal(userId);
 
-    try {
-      const data = await agentApi.readMemory(userId);
-      const stored = data.recent_messages ?? data.messages ?? [];
+    if (isStampFresh(`chat:${userId}`, CHAT_HISTORY_TTL_MS)) return;
 
-      if (stored.length > 0) {
-        messages.value = stored.map((item) => ({
-          id: createMessageId(),
-          role: item.role,
-          content: item.content,
-          displayContent: item.content,
-          timestamp: item.timestamp || new Date().toISOString(),
-        }));
-      } else {
-        messages.value = [createMessage("assistant", WELCOME_MESSAGE)];
+    if (historyRefreshInFlight) return;
+
+    historyRefreshInFlight = (async () => {
+      try {
+        await refreshHistoryFromNetwork(userId);
+      } catch (error) {
+        console.error("[chat] 加载历史失败:", error);
+        if (messages.value.length === 0) {
+          applyHydratedMessages([createMessage("assistant", WELCOME_MESSAGE)]);
+        }
       }
-
-      hasInitialized.value = true;
-      scrollToBottom();
-    } catch (error) {
-      console.error("[chat] 加载历史失败:", error);
-      messages.value = [createMessage("assistant", WELCOME_MESSAGE)];
-      hasInitialized.value = true;
-    } finally {
+    })().finally(() => {
+      historyRefreshInFlight = null;
       isLoadingHistory.value = false;
-    }
+    });
   }
 
   /** 发送用户消息并获取 AI 回复 */
@@ -147,6 +200,7 @@ export const useChatStore = defineStore("chat", () => {
 
     const userMessage = createMessage("user", content);
     messages.value.push(userMessage);
+    persistIfNeeded(userId);
     scrollToBottom();
 
     try {
@@ -171,6 +225,7 @@ export const useChatStore = defineStore("chat", () => {
       scrollToBottom();
 
       await typewriter(assistantMessage.id, reply);
+      persistIfNeeded(userId);
     } catch (error) {
       console.error("[chat] 发送失败:", error);
       const message = error instanceof Error ? error.message : "发送失败，请重试";
@@ -181,11 +236,31 @@ export const useChatStore = defineStore("chat", () => {
         `抱歉，暂时无法连接 AI 服务（${message}）。请稍后重试，或检查 Supabase 是否已部署 query-agent 并配置 SILICONFLOW_API_KEY。`
       );
       messages.value.push(errorReply);
+      persistIfNeeded(userId);
       scrollToBottom();
     } finally {
       isSending.value = false;
       scrollToBottom();
     }
+  }
+
+  /** 打字机效果 */
+  async function typewriter(messageId: string, fullText: string): Promise<void> {
+    const target = messages.value.find((item) => item.id === messageId);
+    if (!target) return;
+
+    target.isTyping = true;
+    target.displayContent = "";
+
+    for (let i = 0; i < fullText.length; i += 1) {
+      target.displayContent = fullText.slice(0, i + 1);
+      scrollToBottom();
+      await new Promise((resolve) => setTimeout(resolve, 18));
+    }
+
+    target.content = fullText;
+    target.displayContent = fullText;
+    target.isTyping = false;
   }
 
   /** 重置对话状态（登出时） */
@@ -196,6 +271,7 @@ export const useChatStore = defineStore("chat", () => {
     isLoadingHistory.value = false;
     hasInitialized.value = false;
     scrollIntoViewId.value = "";
+    clearPersistedChatSnapshot();
   }
 
   return {

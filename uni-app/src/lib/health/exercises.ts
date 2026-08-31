@@ -73,6 +73,67 @@ export function formatExerciseAttribution(ex: Pick<Exercise, "attribution" | "li
   return ex.attribution || `动作数据来源遵循 ${ex.license}。`;
 }
 
+const GIF_OR_ANIM_RE = /\.(gif|webp)(\?|#|$)/i;
+
+/** 优先动图（gif / 可能是动图的 webp），否则静图 */
+export function resolveExerciseDemoUrl(
+  ex: Pick<Exercise, "image_url" | "image_thumbnail_url">
+): string | null {
+  const candidates = [ex.image_url, ex.image_thumbnail_url].filter(
+    (url): url is string => typeof url === "string" && url.trim().length > 0
+  );
+  const animated = candidates.find((url) => GIF_OR_ANIM_RE.test(url));
+  return animated || candidates[0] || null;
+}
+
+export interface ExerciseMedia {
+  id: string;
+  image_url: string | null;
+  image_thumbnail_url: string | null;
+}
+
+const MEDIA_SELECT = "id,image_url,image_thumbnail_url";
+
+/** 按 id 取演示图（App 走 REST，避免 supabase-js） */
+export async function fetchExerciseMediaByIds(
+  ids: string[]
+): Promise<Map<string, ExerciseMedia>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const map = new Map<string, ExerciseMedia>();
+  if (!unique.length) return map;
+
+  // #ifdef APP-PLUS
+  const { ensureAccessToken, restSelect } = await import("@/api/supabase-rest");
+  const accessToken = await ensureAccessToken();
+  if (!accessToken) return map;
+  const rows = await restSelect<ExerciseMedia[]>(
+    "exercises",
+    `id=in.(${unique.join(",")})&select=${MEDIA_SELECT}&is_active=eq.true`,
+    accessToken
+  );
+  for (const row of rows || []) {
+    map.set(row.id, row);
+  }
+  return map;
+  // #endif
+
+  // #ifdef H5
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("exercises")
+    .select(MEDIA_SELECT)
+    .in("id", unique)
+    .eq("is_active", true);
+  if (error) throw error;
+  for (const row of (data || []) as ExerciseMedia[]) {
+    map.set(row.id, row);
+  }
+  return map;
+  // #endif
+
+  return map;
+}
+
 /**
  * 按恢复分 readiness 映射可用强度
  * rest → 仅 light；light → light+moderate；train → 全部

@@ -5,13 +5,33 @@ import {
   setLocalOnboardingDone,
 } from "@/utils/onboarding";
 
+let routingInFlight: Promise<void> | null = null;
+
 /** 已登录用户从登录入口跳转到合适页面 */
 export async function routeAuthedUserFromLogin(): Promise<void> {
+  if (routingInFlight) return routingInFlight;
+  routingInFlight = routeAuthedUserFromLoginOnce().finally(() => {
+    routingInFlight = null;
+  });
+  return routingInFlight;
+}
+
+async function routeAuthedUserFromLoginOnce(): Promise<void> {
   const userStore = useUserStore();
   if (!userStore.isLoggedIn) return;
 
-  // 内存缓存优先
-  if (userStore.profile?.onboarding_completed) {
+  const { ensureAccessToken } = await import("@/utils/auth-session");
+  const token = await ensureAccessToken();
+  if (!token) return;
+
+  // 内存档案或本地引导缓存：立刻进首页，档案后台补
+  if (
+    userStore.profile?.onboarding_completed ||
+    getLocalOnboardingDone(userStore.userId)
+  ) {
+    if (!userStore.profile) {
+      void userStore.fetchProfile().catch(() => null);
+    }
     routeAfterOnboardingGate();
     return;
   }
@@ -26,7 +46,6 @@ export async function routeAuthedUserFromLogin(): Promise<void> {
     return;
   }
 
-  // 档案拉取失败但本地已标记完成 → 不重复走欢迎页
   if (!profile && getLocalOnboardingDone(userStore.userId)) {
     console.warn("[auth-routing] 档案拉取失败，使用本地引导完成缓存");
     routeAfterOnboardingGate();

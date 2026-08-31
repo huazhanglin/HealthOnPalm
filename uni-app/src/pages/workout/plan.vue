@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { onShow } from "@dcloudio/uni-app";
+import { storeToRefs } from "pinia";
 import { computed, ref } from "vue";
-import { agentApi } from "@/api/agent";
 import { createWorkoutLog } from "@/api/workout";
 import { HaButton, HaCard } from "@/components/common";
-import HomeTabBar from "@/components/HomeTabBar.vue";
 import {
   flattenPlanExerciseIds,
   formatPlanItemTitle,
@@ -13,17 +12,20 @@ import {
   type WorkoutPlanItem,
 } from "@/lib/health/workout-plan";
 import type { ManualWorkoutType } from "@/lib/health/workout";
+import { useUserStore } from "@/stores/user";
+import { useWorkoutStore } from "@/stores/workout";
 import { ensureOnboarded } from "@/utils/onboarding";
 import { invalidateFresh } from "@/utils/freshness";
 import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
-import { useUserStore } from "@/stores/user";
 
 const userStore = useUserStore();
-const plan = ref<WorkoutPlan | null>(null);
-const isLoading = ref(false);
+userStore.hydrateFromStorageSync();
+const workoutStore = useWorkoutStore();
+const { plan, isLoading, errorMessage } = storeToRefs(workoutStore);
+
 const isSaving = ref(false);
-const errorMessage = ref("");
 const expandedId = ref<string | null>(null);
+const failedImageIds = ref<Record<string, boolean>>({});
 
 const allItems = computed(() => {
   if (!plan.value) return [] as Array<WorkoutPlanItem & { phaseLabel: string }>;
@@ -49,21 +51,18 @@ function toggleExpand(id: string): void {
   expandedId.value = expandedId.value === id ? null : id;
 }
 
-async function loadPlan(forceRefresh = false): Promise<void> {
-  const uid = userStore.userId;
-  if (!uid) return;
+function hasDemoImage(item: WorkoutPlanItem): boolean {
+  return Boolean(item.image_url) && !failedImageIds.value[item.id];
+}
 
-  isLoading.value = true;
-  errorMessage.value = "";
-  try {
-    plan.value = await agentApi.getWorkoutPlan(uid, { forceRefresh });
-  } catch (error) {
-    console.error("[workout/plan] load failed:", error);
-    const message = error instanceof Error ? error.message : "加载失败";
-    errorMessage.value = message;
-    showErrorToast(message);
-  } finally {
-    isLoading.value = false;
+function onImageError(id: string): void {
+  failedImageIds.value = { ...failedImageIds.value, [id]: true };
+}
+
+async function loadPlan(forceRefresh = false): Promise<void> {
+  await workoutStore.loadPlan(forceRefresh);
+  if (workoutStore.errorMessage && !workoutStore.plan) {
+    showErrorToast(workoutStore.errorMessage);
   }
 }
 
@@ -125,12 +124,15 @@ function openManualLog(): void {
   uni.navigateTo({ url: "/pages/workout/log" });
 }
 
-onShow(async () => {
-  const onboarded = await ensureOnboarded();
-  if (!onboarded) return;
-  if (!plan.value) {
-    await loadPlan(false);
-  }
+onShow(() => {
+  void (async () => {
+    if (!userStore.isLoggedIn) {
+      userStore.hydrateFromStorageSync();
+    }
+    void workoutStore.loadPlan(false);
+    const onboarded = await ensureOnboarded();
+    if (!onboarded) return;
+  })();
 });
 </script>
 
@@ -139,7 +141,7 @@ onShow(async () => {
     <scroll-view class="scroll" scroll-y>
       <view class="header">
         <text class="title">今日训练计划</text>
-        <text class="desc">根据恢复分从精选动作库生成，点开可看动作要点</text>
+        <text class="desc">根据恢复分从精选动作库生成，点开可看动作图示与要点</text>
       </view>
 
       <view v-if="isLoading && !plan" class="state">
@@ -172,6 +174,16 @@ onShow(async () => {
           @tap="toggleExpand(item.id)"
         >
           <view class="exercise-main">
+            <image
+              v-if="hasDemoImage(item)"
+              class="exercise-thumb"
+              :src="item.image_url"
+              mode="aspectFill"
+              @error="onImageError(item.id)"
+            />
+            <view v-else class="exercise-thumb exercise-thumb--empty">
+              <text class="thumb-fallback">{{ item.phaseLabel }}</text>
+            </view>
             <view class="exercise-left">
               <text class="phase">{{ item.phaseLabel }}</text>
               <text class="exercise-name">{{ formatPlanItemTitle(item) }}</text>
@@ -180,6 +192,13 @@ onShow(async () => {
             <text class="chevron">{{ expandedId === item.id ? "收起" : "详情" }}</text>
           </view>
           <view v-if="expandedId === item.id" class="exercise-detail">
+            <image
+              v-if="hasDemoImage(item)"
+              class="exercise-demo"
+              :src="item.image_url"
+              mode="aspectFit"
+              @error="onImageError(item.id)"
+            />
             <text v-if="item.muscles_primary_zh?.length" class="detail-line">
               肌群：{{ item.muscles_primary_zh.join("、") }}
             </text>
@@ -211,8 +230,6 @@ onShow(async () => {
         完成并打卡
       </HaButton>
     </view>
-
-    <HomeTabBar active="train" />
   </view>
 </template>
 
@@ -335,6 +352,25 @@ onShow(async () => {
   gap: 16rpx;
 }
 
+.exercise-thumb {
+  width: 144rpx;
+  height: 144rpx;
+  border-radius: 16rpx;
+  background-color: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.exercise-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumb-fallback {
+  font-size: 22rpx;
+  color: #94a3b8;
+}
+
 .exercise-left {
   flex: 1;
 }
@@ -371,6 +407,14 @@ onShow(async () => {
   margin-top: 16rpx;
   padding-top: 16rpx;
   border-top: 1rpx solid #e2e8f0;
+}
+
+.exercise-demo {
+  width: 100%;
+  height: 360rpx;
+  border-radius: 16rpx;
+  background-color: #f8fafc;
+  margin-bottom: 16rpx;
 }
 
 .detail-line {
@@ -412,7 +456,7 @@ onShow(async () => {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(110rpx + env(safe-area-inset-bottom));
+  bottom: 0;
   padding: 16rpx 32rpx;
   background-color: #ffffff;
   border-top: 1rpx solid #e2e8f0;
@@ -431,3 +475,4 @@ onShow(async () => {
   color: #0d9488;
 }
 </style>
+

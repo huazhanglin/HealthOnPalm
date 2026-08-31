@@ -11,7 +11,7 @@ import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
 type AuthMode = "login" | "register";
 
 const userStore = useUserStore();
-const pageReady = ref(false);
+userStore.hydrateFromStorageSync();
 const mode = ref<AuthMode>("login");
 const email = ref("");
 const password = ref("");
@@ -100,13 +100,19 @@ function openPrivacy(): void {
   uni.showToast({ title: "隐私政策页面开发中", icon: "none" });
 }
 
+let routedFromLogin = false;
+
 function tryRouteAuthedUser(): void {
-  if (!pageReady.value || !userStore.sessionRestored) return;
-  void routeAuthedUserFromLogin();
+  if (routedFromLogin || !userStore.isLoggedIn) return;
+  routedFromLogin = true;
+  void routeAuthedUserFromLogin().then(() => {
+    if (!userStore.isLoggedIn) {
+      routedFromLogin = false;
+    }
+  });
 }
 
 onReady(() => {
-  pageReady.value = true;
   closeSplashscreen();
   tryRouteAuthedUser();
 });
@@ -117,15 +123,25 @@ onShow(() => {
 });
 
 watch(
-  () => userStore.sessionRestored,
-  (restored) => {
-    if (restored) tryRouteAuthedUser();
+  () => [userStore.isLoggedIn, userStore.sessionRestored] as const,
+  () => {
+    tryRouteAuthedUser();
   }
 );
+
+if (userStore.isLoggedIn) {
+  void routeAuthedUserFromLogin();
+}
 </script>
 
 <template>
-  <scroll-view class="page" scroll-y>
+  <view>
+    <view v-if="userStore.isLoggedIn" class="entering">
+      <HaBrandLogo size="large" />
+      <text class="entering-title">Health On Palm</text>
+      <text class="entering-text">正在进入…</text>
+    </view>
+    <scroll-view v-else class="page" scroll-y>
     <view class="container">
       <view class="brand">
         <HaBrandLogo size="large" />
@@ -209,9 +225,31 @@ watch(
       </view>
     </view>
   </scroll-view>
+  </view>
 </template>
 
 <style scoped>
+.entering {
+  min-height: 100vh;
+  background-color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+}
+
+.entering-title {
+  font-size: 44rpx;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.entering-text {
+  font-size: 26rpx;
+  color: #64748b;
+}
+
 .page {
   height: 100vh;
   background-color: #f8fafc;

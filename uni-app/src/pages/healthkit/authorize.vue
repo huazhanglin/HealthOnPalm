@@ -21,6 +21,7 @@ import {
   type HealthKitTodayPayload,
 } from "@/lib/healthkit";
 import { invalidateFresh } from "@/utils/freshness";
+import { switchToTab } from "@/utils/tab";
 import { useUserStore } from "@/stores/user";
 
 type PageStatus = "guide" | "authorizing" | "success" | "failed" | "unavailable";
@@ -260,7 +261,7 @@ function handleSkip(): void {
     uni.navigateBack();
     return;
   }
-  uni.redirectTo({ url: "/pages/index/index" });
+  switchToTab("/pages/index/index");
 }
 
 /** 授权成功后继续 */

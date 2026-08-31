@@ -2,7 +2,6 @@
 import { onReady, onShow } from "@dcloudio/uni-app";
 import { computed, ref } from "vue";
 import { agentApi } from "@/api/agent";
-import HomeTabBar from "@/components/HomeTabBar.vue";
 import { HaAvatar, HaLoading } from "@/components/common";
 import {
   createEmptyTodayHealthMetrics,
@@ -27,9 +26,11 @@ import { ensureTodaySynced } from "@/lib/healthkit";
 import { closeSplashscreen } from "@/utils/splash";
 import { ensureOnboarded } from "@/utils/onboarding";
 import { HOME_DATA_TTL_MS, invalidateFresh, markFresh } from "@/utils/freshness";
+import { switchToTab } from "@/utils/tab";
 import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
 
 const userStore = useUserStore();
+userStore.hydrateFromStorageSync();
 const homeStore = useHomeStore();
 
 const isPageLoading = ref(false);
@@ -306,15 +307,56 @@ function onModifyConfirm(): void {
   void handleFeedback("modified", note);
 }
 
-/** 校验登录并加载首页数据（Store 快照 + TTL，避免 Tab 切回全量刷新） */
+/** 同步完成后静默补齐首页（不挡首屏） */
+async function refreshHomeAfterSync(uid: string): Promise<void> {
+  try {
+    await refreshBriefFromDb(uid);
+    const pageData = await fetchHomePageData(uid);
+    metrics.value = pageData.metrics;
+    metricsSource.value = pageData.metricsSource;
+    qualityScore.value = pageData.qualityScore;
+    persistHomeSnapshot(uid);
+  } catch (error) {
+    console.warn("[index] 后台刷新首页失败:", error);
+  }
+}
+
+/** HealthKit 放到首屏之后：有更新再补丁刷新 */
+async function syncHealthKitThenRefresh(uid: string): Promise<void> {
+  const syncResult = await ensureTodaySynced({ force: false });
+  if (!syncResult.attempted) return;
+  invalidateFresh(`home:${uid}`);
+  homeStore.markStale();
+  await refreshHomeAfterSync(uid);
+}
+
+async function loadHomeFromNetwork(
+  uid: string,
+  options: { force: boolean; hasView: boolean }
+): Promise<void> {
+  if (options.force) {
+    await loadMorningBrief(true);
+  } else if (!options.hasView) {
+    await loadMorningBrief(false);
+  } else {
+    await refreshBriefFromDb(uid);
+  }
+  const pageData = await fetchHomePageData(uid);
+  metrics.value = pageData.metrics;
+  metricsSource.value = pageData.metricsSource;
+  qualityScore.value = pageData.qualityScore;
+  persistHomeSnapshot(uid);
+}
+
+/** 校验登录并加载首页：先画快照/库缓存，HealthKit 后台同步 */
 async function ensureAuthAndLoad(options: { force?: boolean } = {}): Promise<void> {
+  if (!userStore.isLoggedIn) {
+    userStore.hydrateFromStorageSync();
+  }
   if (!userStore.isLoggedIn) {
     uni.reLaunch({ url: "/pages/login/index" });
     return;
   }
-
-  const onboarded = await ensureOnboarded();
-  if (!onboarded) return;
 
   const uid = userStore.userId;
   if (!uid) {
@@ -324,64 +366,70 @@ async function ensureAuthAndLoad(options: { force?: boolean } = {}): Promise<voi
 
   const force = options.force === true;
 
-  // 跨日先清昨日内存/快照，再同步手机健康数据
   discardCrossDayHomeState(uid);
-  const syncResult = await ensureTodaySynced({ force });
-  if (syncResult.attempted) {
-    invalidateFresh(`home:${uid}`);
-    homeStore.markStale();
-  }
-
   const hadView = !!briefData.value;
   const restored = hydrateFromHomeStore(uid);
   const hasView = !!briefData.value;
 
-  // TTL 内且已有可展示数据：直接返回，不请求
-  if (!force && hasView && homeStore.isFresh(uid, HOME_DATA_TTL_MS)) {
+  const onboarded = await ensureOnboarded();
+  if (!onboarded) return;
+
+  if (force) {
+    isPageLoading.value = true;
+    showLoading("加载中...");
+    try {
+      const syncResult = await ensureTodaySynced({ force: true });
+      if (syncResult.attempted) {
+        invalidateFresh(`home:${uid}`);
+        homeStore.markStale();
+      }
+      await loadHomeFromNetwork(uid, { force: true, hasView });
+    } catch (error) {
+      console.error("[index] 加载首页数据失败:", error);
+      showErrorToast("数据加载失败，请下拉刷新重试");
+    } finally {
+      isPageLoading.value = false;
+      hideLoading();
+    }
     return;
   }
 
-  // 有旧快照但已过期：先秒开旧数据，后台静默刷新（无全屏 Loading）
-  const silent = !force && hasView;
-  const blocking = !silent && !hasView;
-
-  if (!silent) {
-    isPageLoading.value = true;
-  }
-  if (blocking) {
-    showLoading("加载中...");
+  if (hasView && homeStore.isFresh(uid, HOME_DATA_TTL_MS)) {
+    void syncHealthKitThenRefresh(uid);
+    return;
   }
 
+  if (hasView) {
+    void (async () => {
+      try {
+        await loadHomeFromNetwork(uid, { force: false, hasView: true });
+      } catch (error) {
+        console.warn("[index] 静默刷新首页失败:", error);
+      }
+      await syncHealthKitThenRefresh(uid);
+    })();
+    return;
+  }
+
+  isPageLoading.value = true;
+  showLoading("加载中...");
   try {
-    if (force) {
-      await loadMorningBrief(true);
-    } else if (!hasView) {
-      await loadMorningBrief(false);
-    } else {
-      // 静默：只读库里的今日简报，不触发生成（省 Edge 调用）
-      await refreshBriefFromDb(uid);
-    }
-    const pageData = await fetchHomePageData(uid);
-    metrics.value = pageData.metrics;
-    metricsSource.value = pageData.metricsSource;
-    qualityScore.value = pageData.qualityScore;
-    persistHomeSnapshot(uid);
+    await loadHomeFromNetwork(uid, { force: false, hasView: false });
   } catch (error) {
     console.error("[index] 加载首页数据失败:", error);
-    if (blocking || force || (!hadView && !restored)) {
+    if (!hadView && !restored) {
       showErrorToast("数据加载失败，请下拉刷新重试");
     }
   } finally {
     isPageLoading.value = false;
-    if (blocking) {
-      hideLoading();
-    }
+    hideLoading();
   }
+  void syncHealthKitThenRefresh(uid);
 }
 
-/** 进入训练 Tab（底部导航） */
+/** 进入训练 Tab */
 function openWorkoutPlan(): void {
-  uni.redirectTo({ url: "/pages/workout/plan" });
+  switchToTab("/pages/workout/plan");
 }
 
 onReady(() => {
@@ -573,12 +621,7 @@ onShow(() => {
           <text class="metrics-more-arrow">{{ metricsExpanded ? "▲" : "▼" }}</text>
         </view>
       </view>
-
-      <!-- 底部 Tab 占位 -->
-      <view class="tab-placeholder" />
     </view>
-
-    <HomeTabBar active="home" />
   </view>
 </template>
 
@@ -1055,9 +1098,5 @@ onShow(() => {
   width: 2rpx;
   height: 64rpx;
   background-color: #e2e8f0;
-}
-
-.tab-placeholder {
-  height: 130rpx;
 }
 </style>

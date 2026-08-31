@@ -1,27 +1,22 @@
 /**
- * 首页数据快照：Tab 使用 redirectTo 会销毁页面，
- * 用 Pinia 跨页保留，避免每次回到首页都全量请求。
+ * 首页数据快照：Tab 页常驻后仍用于冷启动秒开。
+ * 用 Pinia + 本地存储跨页/冷启动保留，避免每次回到首页都全量请求。
  */
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type {
+  HomeSnapshot,
   MetricsDataSource,
   MorningBriefData,
   TodayHealthMetrics,
 } from "@/lib/health/types";
+import {
+  clearPersistedHomeSnapshot,
+  readPersistedHomeSnapshot,
+  writePersistedHomeSnapshot,
+} from "@/lib/health/home-snapshot";
 import { createEmptyTodayHealthMetrics } from "@/lib/health/metrics-display";
-import { HOME_DATA_TTL_MS, isFresh as isStampFresh } from "@/utils/freshness";
-
-export interface HomeSnapshot {
-  userId: string;
-  /** YYYY-MM-DD，跨日自动失效 */
-  date: string;
-  brief: MorningBriefData | null;
-  metrics: TodayHealthMetrics;
-  metricsSource: MetricsDataSource;
-  qualityScore: number;
-  updatedAt: number;
-}
+import { HOME_DATA_TTL_MS, isFresh as isStampFresh, markFresh } from "@/utils/freshness";
 
 function todayYmd(): string {
   const now = new Date();
@@ -31,8 +26,23 @@ function todayYmd(): string {
   return `${y}-${m}-${d}`;
 }
 
+export type { HomeSnapshot };
+
 export const useHomeStore = defineStore("home", () => {
   const snapshot = ref<HomeSnapshot | null>(null);
+  let diskHydrated = false;
+
+  function hydrateFromDisk(userId: string): void {
+    if (diskHydrated) return;
+    diskHydrated = true;
+    if (snapshot.value) return;
+    const stored = readPersistedHomeSnapshot(userId);
+    if (!stored) return;
+    snapshot.value = stored;
+    if (stored.updatedAt > 0 && Date.now() - stored.updatedAt < HOME_DATA_TTL_MS) {
+      markFresh(`home:${userId}`);
+    }
+  }
 
   function markStale(): void {
     if (!snapshot.value) return;
@@ -41,9 +51,12 @@ export const useHomeStore = defineStore("home", () => {
 
   function clear(): void {
     snapshot.value = null;
+    diskHydrated = false;
+    clearPersistedHomeSnapshot();
   }
 
   function hasUsableSnapshot(userId: string): boolean {
+    hydrateFromDisk(userId);
     const s = snapshot.value;
     if (!s || s.userId !== userId) return false;
     if (s.date !== todayYmd()) return false;
@@ -52,7 +65,7 @@ export const useHomeStore = defineStore("home", () => {
 
   function isFresh(userId: string, ttlMs = HOME_DATA_TTL_MS): boolean {
     if (!hasUsableSnapshot(userId)) return false;
-    // 与 invalidateFresh(`home:…`) 共用 stamp，记录页写入后可强制后台刷新
+    if ((snapshot.value?.updatedAt ?? 0) === 0) return false;
     if (!isStampFresh(`home:${userId}`, ttlMs)) return false;
     return Date.now() - (snapshot.value?.updatedAt ?? 0) < ttlMs;
   }
@@ -73,6 +86,8 @@ export const useHomeStore = defineStore("home", () => {
       qualityScore: payload.qualityScore,
       updatedAt: Date.now(),
     };
+    writePersistedHomeSnapshot(snapshot.value);
+    diskHydrated = true;
   }
 
   /** 用快照更新本地状态引用（由页面传入 setter） */

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onShow } from "@dcloudio/uni-app";
-import HomeTabBar from "@/components/HomeTabBar.vue";
 import { HaCard } from "@/components/common";
 import { ensureOnboarded } from "@/utils/onboarding";
 
@@ -119,8 +118,7 @@ onShow(async () => {
       </HaCard>
     </view>
 
-    <view class="tab-placeholder" />
-    <HomeTabBar active="records" />
+    </view>
   </view>
 </template>
 
@@ -186,9 +184,5 @@ onShow(async () => {
 .entry-arrow {
   font-size: 36rpx;
   color: #94a3b8;
-}
-
-.tab-placeholder {
-  height: 130rpx;
 }
 </style>

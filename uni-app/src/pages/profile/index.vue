@@ -2,7 +2,6 @@
 import { onShow } from "@dcloudio/uni-app";
 import { computed, reactive, ref } from "vue";
 import { updateUserProfile } from "@/api/user";
-import HomeTabBar from "@/components/HomeTabBar.vue";
 import { HaAvatar } from "@/components/common";
 import { useUserStore } from "@/stores/user";
 import {
@@ -29,6 +28,7 @@ import {
   isFresh,
   markFresh,
 } from "@/utils/freshness";
+import { switchToTab } from "@/utils/tab";
 import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
 
 const userStore = useUserStore();
@@ -194,7 +194,7 @@ async function handleSave(): Promise<void> {
 
     uni.showToast({ title: "保存成功", icon: "success" });
     setTimeout(() => {
-      uni.redirectTo({ url: "/pages/index/index" });
+      switchToTab("/pages/index/index");
     }, 800);
   } catch (error) {
     console.error("[profile] 保存失败:", error);
@@ -439,11 +439,7 @@ onShow(async () => {
       <button class="logout-btn" :disabled="isSaving" @tap="handleLogout">
         退出登录
       </button>
-
-      <view class="tab-placeholder" />
     </view>
-
-    <HomeTabBar active="profile" />
   </view>
 </template>
 
@@ -644,10 +640,6 @@ onShow(async () => {
 
 .logout-btn::after {
   border: none;
-}
-
-.tab-placeholder {
-  height: 130rpx;
 }
 
 .sync-entry {

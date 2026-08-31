@@ -94,6 +94,18 @@ export interface HomePageData {
   qualityScore: number;
 }
 
+/** 首页展示快照（内存 + 本地存储，供冷启动秒开） */
+export interface HomeSnapshot {
+  userId: string;
+  /** YYYY-MM-DD，跨日自动失效 */
+  date: string;
+  brief: MorningBriefData | null;
+  metrics: TodayHealthMetrics;
+  metricsSource: MetricsDataSource;
+  qualityScore: number;
+  updatedAt: number;
+}
+
 /** 首页指标展示项 */
 export interface TodayMetricDisplayItem {
   key: string;
