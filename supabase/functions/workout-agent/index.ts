@@ -23,7 +23,7 @@ const WORKOUT_SYSTEM_PROMPT = `你是 Health On Palm（简称 HOP）的专业健
 2. 恢复分 < 50 或 readiness=rest：只选 light / warmup / cooldown，禁止高强度主训
 3. 恢复分 50-80 或 readiness=light：以 light/moderate 为主，主训动作不超过偏好时长的 70%
 4. 恢复分 > 80 或 readiness=train：可正常强度，仍禁止编造动作
-5. 不提供具体重量/组数/次数
+5. 每个动作必须给出组数，以及次数或时长（秒）；禁止给出具体公斤重量或负荷。热身 1 组，正式 2–4 组，拉伸 1 组按时长。次数用区间如 "8-12"。平板/拉伸等用 duration_seconds，reps 填 null
 6. 热身 1-2 个、正式 3-5 个、拉伸 1-2 个
 7. 不要在结尾附加固定免责声明句
 8. 只输出 JSON，不要 Markdown 代码块以外的解释
@@ -34,9 +34,9 @@ const WORKOUT_SYSTEM_PROMPT = `你是 Health On Palm（简称 HOP）的专业健
   "reason": "为什么今天适合这个安排（2-3句）",
   "duration_minutes": 30,
   "estimated_calories": 180,
-  "warmup": [{"id":"uuid","tips":"要点一句"}],
-  "main": [{"id":"uuid","tips":"要点一句"}],
-  "cooldown": [{"id":"uuid","tips":"要点一句"}]
+  "warmup": [{"id":"uuid","tips":"要点一句","sets":1,"reps":"8-10","duration_seconds":null}],
+  "main": [{"id":"uuid","tips":"要点一句","sets":3,"reps":"8-12","duration_seconds":null}],
+  "cooldown": [{"id":"uuid","tips":"要点一句","sets":1,"reps":null,"duration_seconds":30}]
 }`;
 
 interface RequestBody {
@@ -44,6 +44,9 @@ interface RequestBody {
   force_refresh?: boolean;
   bodyweight_only?: boolean;
 }
+
+type DosePhase = "warmup" | "main" | "cooldown";
+type Readiness = "train" | "light" | "rest";
 
 interface PlanItem {
   id: string;
@@ -58,6 +61,17 @@ interface PlanItem {
   image_url: string | null;
   attribution: string;
   description: string;
+  sets: number | null;
+  reps: string | null;
+  duration_seconds: number | null;
+}
+
+interface LlmPick {
+  id?: string;
+  tips?: string;
+  sets?: unknown;
+  reps?: unknown;
+  duration_seconds?: unknown;
 }
 
 export interface WorkoutPlanPayload {
@@ -103,11 +117,100 @@ function parseCachedPlan(raw: string | null | undefined): WorkoutPlanPayload | n
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as WorkoutPlanPayload;
-    if (parsed?.version === 1 && Array.isArray(parsed.main)) return parsed;
+    if (parsed?.version === 1 && Array.isArray(parsed.main)) {
+      return ensurePlanDoses(parsed);
+    }
   } catch {
     // ignore legacy text plans
   }
   return null;
+}
+
+function looksTimedExercise(item: Pick<PlanItem, "name_zh" | "name_en" | "category_zh">): boolean {
+  const text = `${item.name_zh} ${item.name_en} ${item.category_zh}`.toLowerCase();
+  return /plank|hold|stretch|isometric|平板|支撑|拉伸|静蹲|wall sit|鸟狗|dead bug/.test(
+    text,
+  );
+}
+
+function clampSets(raw: unknown): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(6, Math.max(1, Math.round(n)));
+}
+
+function parseReps(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim().replace(/[–—]/g, "-").replace(/次/g, "").trim();
+  if (!s) return null;
+  if (/^\d{1,2}(-\d{1,2})?$/.test(s)) return s;
+  return null;
+}
+
+function clampDuration(raw: unknown): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(180, Math.max(5, Math.round(n)));
+}
+
+function hasExerciseDose(item: Pick<PlanItem, "sets" | "reps" | "duration_seconds">): boolean {
+  const sets = clampSets(item.sets);
+  const reps = parseReps(item.reps);
+  const duration = clampDuration(item.duration_seconds);
+  return (sets != null && reps != null) || duration != null;
+}
+
+function defaultExerciseDose(
+  phase: DosePhase,
+  item: Pick<PlanItem, "name_zh" | "name_en" | "category_zh" | "intensity">,
+  readiness: Readiness,
+): Pick<PlanItem, "sets" | "reps" | "duration_seconds"> {
+  const timed = looksTimedExercise(item);
+  if (phase === "warmup") {
+    if (timed) return { sets: 1, reps: null, duration_seconds: 30 };
+    return { sets: 1, reps: "8-10", duration_seconds: null };
+  }
+  if (phase === "cooldown") {
+    return { sets: 1, reps: null, duration_seconds: 30 };
+  }
+  if (timed) {
+    if (readiness === "rest") return { sets: 2, reps: null, duration_seconds: 20 };
+    if (readiness === "light") return { sets: 2, reps: null, duration_seconds: 25 };
+    return { sets: 3, reps: null, duration_seconds: 30 };
+  }
+  if (readiness === "rest") return { sets: 2, reps: "8-10", duration_seconds: null };
+  if (readiness === "light") return { sets: 2, reps: "10-12", duration_seconds: null };
+  if (item.intensity === "high") return { sets: 3, reps: "6-10", duration_seconds: null };
+  return { sets: 3, reps: "8-12", duration_seconds: null };
+}
+
+function resolveItemDose(
+  item: PlanItem,
+  phase: DosePhase,
+  readiness: Readiness,
+  pick?: LlmPick,
+): PlanItem {
+  const sets = clampSets(pick?.sets ?? item.sets);
+  const reps = parseReps(pick?.reps ?? item.reps);
+  const duration = clampDuration(pick?.duration_seconds ?? item.duration_seconds);
+  const merged: PlanItem = {
+    ...item,
+    sets,
+    reps,
+    duration_seconds: duration,
+  };
+  if (hasExerciseDose(merged)) return merged;
+  return { ...item, ...defaultExerciseDose(phase, item, readiness) };
+}
+
+function ensurePlanDoses(plan: WorkoutPlanPayload): WorkoutPlanPayload {
+  const readiness = plan.workout_readiness;
+  return {
+    ...plan,
+    warmup: plan.warmup.map((item) => resolveItemDose(item, "warmup", readiness)),
+    main: plan.main.map((item) => resolveItemDose(item, "main", readiness)),
+    cooldown: plan.cooldown.map((item) => resolveItemDose(item, "cooldown", readiness)),
+  };
 }
 
 function extractJsonObject(text: string): Record<string, unknown> | null {
@@ -125,9 +228,11 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
 }
 
 function enrichItems(
-  picks: Array<{ id?: string; tips?: string }> | undefined,
+  picks: LlmPick[] | undefined,
   catalog: Map<string, ExerciseRow>,
   max: number,
+  phase: DosePhase,
+  readiness: Readiness,
 ): PlanItem[] {
   const out: PlanItem[] = [];
   for (const pick of picks || []) {
@@ -135,7 +240,7 @@ function enrichItems(
     const id = String(pick?.id || "");
     const ex = catalog.get(id);
     if (!ex) continue;
-    out.push({
+    const base: PlanItem = {
       id: ex.id,
       tips: String(pick?.tips || "保持动作控制，不适即停。").slice(0, 80),
       name_zh: ex.name_zh,
@@ -148,7 +253,11 @@ function enrichItems(
       image_url: ex.image_url,
       attribution: ex.attribution,
       description: (ex.description_zh || ex.description_en || "").slice(0, 400),
-    });
+      sets: null,
+      reps: null,
+      duration_seconds: null,
+    };
+    out.push(resolveItemDose(base, phase, readiness, pick));
   }
   return out;
 }
@@ -179,29 +288,51 @@ function buildFallbackPlan(
         : preferredDuration;
 
   const take = (list: ExerciseRow[], n: number) => list.slice(0, n);
-  const mapItems = (list: ExerciseRow[], tip: string): PlanItem[] =>
-    list.map((ex) => ({
-      id: ex.id,
-      tips: tip,
-      name_zh: ex.name_zh,
-      name_en: ex.name_en,
-      category_zh: ex.category_zh,
-      intensity: ex.intensity,
-      movement_phase: ex.movement_phase,
-      equipment_zh: ex.equipment_zh || [],
-      muscles_primary_zh: ex.muscles_primary_zh || [],
-      image_url: ex.image_url,
-      attribution: ex.attribution,
-      description: (ex.description_zh || ex.description_en || "").slice(0, 400),
-    }));
+  const mapItems = (
+    list: ExerciseRow[],
+    tip: string,
+    phase: DosePhase,
+  ): PlanItem[] =>
+    list.map((ex) =>
+      resolveItemDose(
+        {
+          id: ex.id,
+          tips: tip,
+          name_zh: ex.name_zh,
+          name_en: ex.name_en,
+          category_zh: ex.category_zh,
+          intensity: ex.intensity,
+          movement_phase: ex.movement_phase,
+          equipment_zh: ex.equipment_zh || [],
+          muscles_primary_zh: ex.muscles_primary_zh || [],
+          image_url: ex.image_url,
+          attribution: ex.attribution,
+          description: (ex.description_zh || ex.description_en || "").slice(0, 400),
+          sets: null,
+          reps: null,
+          duration_seconds: null,
+        },
+        phase,
+        readiness,
+      )
+    );
 
-  const warmup = mapItems(take(byPhase.warmup, 2), "缓慢活动关节，逐步提高心率。");
+  const warmup = mapItems(
+    take(byPhase.warmup, 2),
+    "缓慢活动关节，逐步提高心率。",
+    "warmup",
+  );
   const mainCount = readiness === "rest" ? 2 : readiness === "light" ? 3 : 4;
   const main = mapItems(
     take(byPhase.main.length ? byPhase.main : catalog, mainCount),
     readiness === "rest" ? "轻松完成即可，不必追求强度。" : "动作标准优先，呼吸均匀。",
+    "main",
   );
-  const cooldown = mapItems(take(byPhase.cooldown, 2), "拉伸时不要弹振，感到牵拉即可。");
+  const cooldown = mapItems(
+    take(byPhase.cooldown, 2),
+    "拉伸时不要弹振，感到牵拉即可。",
+    "cooldown",
+  );
 
   const title =
     readiness === "rest"
@@ -347,24 +478,30 @@ ${formatExerciseCatalogForPrompt(candidates)}
           { role: "system", content: WORKOUT_SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
-        { maxTokens: 900, temperature: 0.5 },
+        { maxTokens: 1400, temperature: 0.5 },
       );
       const parsed = extractJsonObject(llm.content);
       if (parsed) {
         const warmup = enrichItems(
-          parsed.warmup as Array<{ id?: string; tips?: string }>,
+          parsed.warmup as LlmPick[],
           catalogMap,
           2,
+          "warmup",
+          readiness,
         );
         const main = enrichItems(
-          parsed.main as Array<{ id?: string; tips?: string }>,
+          parsed.main as LlmPick[],
           catalogMap,
           readiness === "rest" ? 3 : 5,
+          "main",
+          readiness,
         );
         const cooldown = enrichItems(
-          parsed.cooldown as Array<{ id?: string; tips?: string }>,
+          parsed.cooldown as LlmPick[],
           catalogMap,
           2,
+          "cooldown",
+          readiness,
         );
 
         if (main.length >= 1) {
@@ -423,6 +560,7 @@ ${formatExerciseCatalogForPrompt(candidates)}
     }
 
     plan.generated_by = generatedBy;
+    plan = ensurePlanDoses(plan);
 
     // 持久化到当日摘要，形成可复用缓存
     const upsertPayload = {

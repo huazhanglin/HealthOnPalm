@@ -422,6 +422,7 @@ export {
   intensitiesForReadiness,
   listExercises,
   pickPlanCandidates,
+  localExerciseDemoUrl,
   resolveExerciseDemoUrl,
   resolveExerciseDescription,
 } from "@/lib/health/exercises";
@@ -430,8 +431,12 @@ export type { Exercise, ExerciseQuery } from "@/lib/health/exercises";
 
 export {
   enrichWorkoutPlanMedia,
+  ensureWorkoutPlanDoses,
+  applyLocalExerciseDemos,
   fetchTodayCachedWorkoutPlan,
   flattenPlanExerciseIds,
+  formatExerciseDose,
+  formatExerciseThumbLabel,
   formatPlanItemTitle,
   readinessLabel,
 } from "@/lib/health/workout-plan";

@@ -32,6 +32,12 @@ export interface WorkoutPlanItem {
   image_url: string | null;
   attribution: string;
   description: string;
+  /** 组数（1–6） */
+  sets?: number | null;
+  /** 次数或区间，如 "10" / "10-12"；与 duration_seconds 择一为主 */
+  reps?: string | null;
+  /** 按时长完成的动作（平板、拉伸等），秒 */
+  duration_seconds?: number | null;
 }
 
 export interface WorkoutPlan {
@@ -50,8 +56,102 @@ export interface WorkoutPlan {
   attribution_note: string;
 }
 
+type DosePhase = "warmup" | "main" | "cooldown";
+
 function utcYmd(): string {
   return new Date().toISOString().split("T")[0];
+}
+
+function looksTimedExercise(item: Pick<WorkoutPlanItem, "name_zh" | "name_en" | "category_zh">): boolean {
+  const text = `${item.name_zh} ${item.name_en} ${item.category_zh}`.toLowerCase();
+  return /plank|hold|stretch|isometric|平板|支撑|拉伸|静蹲|wall sit|鸟狗|dead bug/.test(
+    text
+  );
+}
+
+function hasExerciseDose(item: WorkoutPlanItem): boolean {
+  const sets = Number(item.sets);
+  const hasSets = Number.isFinite(sets) && sets >= 1;
+  const hasReps = typeof item.reps === "string" && item.reps.trim().length > 0;
+  const duration = Number(item.duration_seconds);
+  const hasDuration = Number.isFinite(duration) && duration >= 5;
+  return (hasSets && hasReps) || hasDuration;
+}
+
+/** 缺剂量时按阶段与恢复档补保守默认值（不写重量） */
+export function defaultExerciseDose(
+  phase: DosePhase,
+  item: Pick<WorkoutPlanItem, "name_zh" | "name_en" | "category_zh" | "intensity">,
+  readiness: WorkoutPlan["workout_readiness"]
+): Pick<WorkoutPlanItem, "sets" | "reps" | "duration_seconds"> {
+  const timed = looksTimedExercise(item);
+
+  if (phase === "warmup") {
+    if (timed) return { sets: 1, reps: null, duration_seconds: 30 };
+    return { sets: 1, reps: "8-10", duration_seconds: null };
+  }
+
+  if (phase === "cooldown") {
+    return { sets: 1, reps: null, duration_seconds: 30 };
+  }
+
+  if (timed) {
+    if (readiness === "rest") return { sets: 2, reps: null, duration_seconds: 20 };
+    if (readiness === "light") return { sets: 2, reps: null, duration_seconds: 25 };
+    return { sets: 3, reps: null, duration_seconds: 30 };
+  }
+
+  if (readiness === "rest") return { sets: 2, reps: "8-10", duration_seconds: null };
+  if (readiness === "light") return { sets: 2, reps: "10-12", duration_seconds: null };
+  if (item.intensity === "high") return { sets: 3, reps: "6-10", duration_seconds: null };
+  return { sets: 3, reps: "8-12", duration_seconds: null };
+}
+
+export function ensureWorkoutPlanDoses(plan: WorkoutPlan): WorkoutPlan {
+  const readiness = plan.workout_readiness;
+  const fix = (item: WorkoutPlanItem, phase: DosePhase): WorkoutPlanItem => {
+    if (hasExerciseDose(item)) {
+      return {
+        ...item,
+        sets: item.sets != null ? Math.min(6, Math.max(1, Math.round(Number(item.sets)))) : item.sets,
+        reps: item.reps?.trim() || null,
+        duration_seconds:
+          item.duration_seconds != null
+            ? Math.min(180, Math.max(5, Math.round(Number(item.duration_seconds))))
+            : null,
+      };
+    }
+    return { ...item, ...defaultExerciseDose(phase, item, readiness) };
+  };
+
+  return {
+    ...plan,
+    warmup: plan.warmup.map((item) => fix(item, "warmup")),
+    main: plan.main.map((item) => fix(item, "main")),
+    cooldown: plan.cooldown.map((item) => fix(item, "cooldown")),
+  };
+}
+
+/** 展示用剂量文案，如「3 组 × 10–12 次」 */
+export function formatExerciseDose(
+  item: Pick<WorkoutPlanItem, "sets" | "reps" | "duration_seconds">
+): string {
+  const sets = Number(item.sets);
+  const duration = Number(item.duration_seconds);
+  const reps = typeof item.reps === "string" ? item.reps.trim() : "";
+
+  if (Number.isFinite(duration) && duration >= 5) {
+    if (Number.isFinite(sets) && sets >= 1) {
+      return `${Math.round(sets)} 组 × 每组 ${Math.round(duration)} 秒`;
+    }
+    return `保持 ${Math.round(duration)} 秒`;
+  }
+
+  if (Number.isFinite(sets) && sets >= 1 && reps) {
+    return `${Math.round(sets)} 组 × ${reps.replace(/-/g, "–")} 次`;
+  }
+
+  return "";
 }
 
 async function fetchAiPlanByDate(
@@ -66,7 +166,8 @@ async function fetchAiPlanByDate(
     `user_id=eq.${userId}&date=eq.${date}&select=ai_plan`,
     accessToken
   );
-  return parseWorkoutPlan(row?.ai_plan);
+  const plan = parseWorkoutPlan(row?.ai_plan);
+  return plan ? ensureWorkoutPlanDoses(plan) : null;
   // #endif
 
   // #ifdef H5
@@ -80,7 +181,8 @@ async function fetchAiPlanByDate(
     console.warn("[workout-plan] 读取缓存计划失败:", error.message);
     return null;
   }
-  return parseWorkoutPlan(data?.ai_plan);
+  const plan = parseWorkoutPlan(data?.ai_plan);
+  return plan ? ensureWorkoutPlanDoses(plan) : null;
   // #endif
 
   return null;
@@ -100,34 +202,49 @@ export async function fetchTodayCachedWorkoutPlan(
 
 function withResolvedImage(
   item: WorkoutPlanItem,
-  media: { image_url: string | null; image_thumbnail_url: string | null } | undefined
+  media?: { image_url: string | null; image_thumbnail_url: string | null }
 ): WorkoutPlanItem {
   const demo = resolveExerciseDemoUrl({
     image_url: media?.image_url ?? item.image_url,
     image_thumbnail_url: media?.image_thumbnail_url ?? null,
+    name_en: item.name_en,
+    name_zh: item.name_zh,
   });
   return { ...item, image_url: demo };
+}
+
+/** 无网也可套上本地示意图（如侧平板） */
+export function applyLocalExerciseDemos(plan: WorkoutPlan): WorkoutPlan {
+  return {
+    ...plan,
+    warmup: plan.warmup.map((item) => withResolvedImage(item)),
+    main: plan.main.map((item) => withResolvedImage(item)),
+    cooldown: plan.cooldown.map((item) => withResolvedImage(item)),
+  };
 }
 
 /** 用动作库补齐演示图，优先 gif */
 export async function enrichWorkoutPlanMedia(
   plan: WorkoutPlan
 ): Promise<WorkoutPlan> {
-  const ids = flattenPlanExerciseIds(plan);
-  if (!ids.length) return plan;
+  const withDose = ensureWorkoutPlanDoses(plan);
+  const ids = flattenPlanExerciseIds(withDose);
+  if (!ids.length) return applyLocalExerciseDemos(withDose);
   try {
     const media = await fetchExerciseMediaByIds(ids);
     return {
-      ...plan,
-      warmup: plan.warmup.map((item) => withResolvedImage(item, media.get(item.id))),
-      main: plan.main.map((item) => withResolvedImage(item, media.get(item.id))),
-      cooldown: plan.cooldown.map((item) =>
+      ...withDose,
+      warmup: withDose.warmup.map((item) =>
+        withResolvedImage(item, media.get(item.id))
+      ),
+      main: withDose.main.map((item) => withResolvedImage(item, media.get(item.id))),
+      cooldown: withDose.cooldown.map((item) =>
         withResolvedImage(item, media.get(item.id))
       ),
     };
   } catch (error) {
     console.warn("[workout-plan] 补齐动作图失败:", error);
-    return plan;
+    return applyLocalExerciseDemos(withDose);
   }
 }
 
@@ -147,4 +264,18 @@ export function readinessLabel(
 export function formatPlanItemTitle(item: Pick<WorkoutPlanItem, "name_zh" | "name_en">): string {
   if (!item.name_zh || item.name_zh === item.name_en) return item.name_en;
   return `${item.name_zh}（${item.name_en}）`;
+}
+
+/** 无图占位：动作名缩写，避免只显示「热身」「正式」 */
+export function formatExerciseThumbLabel(
+  item: Pick<WorkoutPlanItem, "name_zh" | "name_en">
+): string {
+  const zh = (item.name_zh || "").trim();
+  if (/^[\u4e00-\u9fff]/.test(zh)) return zh.slice(0, 2) || "练";
+  const en = (item.name_en || zh).trim();
+  const words = en.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return `${words[0][0] || ""}${words[1][0] || ""}`.toUpperCase();
+  }
+  return (en.slice(0, 2) || "练").toUpperCase();
 }

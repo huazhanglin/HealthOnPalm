@@ -75,15 +75,44 @@ export function formatExerciseAttribution(ex: Pick<Exercise, "attribution" | "li
 
 const GIF_OR_ANIM_RE = /\.(gif|webp)(\?|#|$)/i;
 
-/** 优先动图（gif / 可能是动图的 webp），否则静图 */
+/**
+ * wger 未提供配图时，使用 App 内置示意图（无网也可显示）。
+ */
+const LOCAL_DEMO_BY_NAME: Record<string, string> = {
+  "side plank": "/static/exercises/side-plank.png",
+  "侧平板": "/static/exercises/side-plank.png",
+};
+
+function normalizeExerciseName(name: string | null | undefined): string {
+  return (name || "").trim().toLowerCase();
+}
+
+/** 本地打包的动作示意图（无网也可用） */
+export function localExerciseDemoUrl(
+  nameEn?: string | null,
+  nameZh?: string | null
+): string | null {
+  for (const name of [nameEn, nameZh]) {
+    const key = normalizeExerciseName(name);
+    if (key && LOCAL_DEMO_BY_NAME[key]) return LOCAL_DEMO_BY_NAME[key];
+  }
+  return null;
+}
+
+/** 优先动图（gif / 可能是动图的 webp），否则静图，再否则本地示意图 */
 export function resolveExerciseDemoUrl(
-  ex: Pick<Exercise, "image_url" | "image_thumbnail_url">
+  ex: Pick<Exercise, "image_url" | "image_thumbnail_url"> & {
+    name_en?: string | null;
+    name_zh?: string | null;
+  }
 ): string | null {
   const candidates = [ex.image_url, ex.image_thumbnail_url].filter(
     (url): url is string => typeof url === "string" && url.trim().length > 0
   );
   const animated = candidates.find((url) => GIF_OR_ANIM_RE.test(url));
-  return animated || candidates[0] || null;
+  const remote = animated || candidates[0] || null;
+  if (remote && !remote.startsWith("/static/")) return remote;
+  return localExerciseDemoUrl(ex.name_en, ex.name_zh) || remote;
 }
 
 export interface ExerciseMedia {
@@ -108,10 +137,11 @@ export async function fetchExerciseMediaByIds(
   if (!accessToken) return map;
   const rows = await restSelect<ExerciseMedia[]>(
     "exercises",
-    `id=in.(${unique.join(",")})&select=${MEDIA_SELECT}&is_active=eq.true`,
+    `id=in.(${unique.map((id) => `"${id}"`).join(",")})&select=${MEDIA_SELECT}&is_active=eq.true`,
     accessToken
   );
-  for (const row of rows || []) {
+  const list = Array.isArray(rows) ? rows : [];
+  for (const row of list) {
     map.set(row.id, row);
   }
   return map;

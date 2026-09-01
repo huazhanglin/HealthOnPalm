@@ -6,6 +6,8 @@ import { ref } from "vue";
 import { agentApi } from "@/api/agent";
 import {
   enrichWorkoutPlanMedia,
+  ensureWorkoutPlanDoses,
+  applyLocalExerciseDemos,
   fetchTodayCachedWorkoutPlan,
   type WorkoutPlan,
 } from "@/lib/health/workout-plan";
@@ -29,16 +31,20 @@ export const useWorkoutStore = defineStore("workout", () => {
   const errorMessage = ref("");
 
   function persist(userId: string, next: WorkoutPlan): void {
-    plan.value = next;
-    writePersistedWorkoutPlan(userId, next);
+    const withDose = applyLocalExerciseDemos(ensureWorkoutPlanDoses(next));
+    plan.value = withDose;
+    writePersistedWorkoutPlan(userId, withDose);
     markFresh(`workout-plan:${userId}`);
   }
 
   function hydrateLocal(userId: string): void {
-    if (plan.value) return;
+    if (plan.value) {
+      plan.value = applyLocalExerciseDemos(ensureWorkoutPlanDoses(plan.value));
+      return;
+    }
     const stored = readPersistedWorkoutPlan(userId);
     if (!stored) return;
-    plan.value = stored.plan;
+    plan.value = applyLocalExerciseDemos(ensureWorkoutPlanDoses(stored.plan));
     if (
       stored.updatedAt > 0 &&
       Date.now() - stored.updatedAt < WORKOUT_PLAN_TTL_MS

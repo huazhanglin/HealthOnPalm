@@ -6,11 +6,14 @@ import { createWorkoutLog } from "@/api/workout";
 import { HaButton, HaCard } from "@/components/common";
 import {
   flattenPlanExerciseIds,
+  formatExerciseDose,
+  formatExerciseThumbLabel,
   formatPlanItemTitle,
   readinessLabel,
   type WorkoutPlan,
   type WorkoutPlanItem,
 } from "@/lib/health/workout-plan";
+import { localExerciseDemoUrl } from "@/lib/health/exercises";
 import type { ManualWorkoutType } from "@/lib/health/workout";
 import { useUserStore } from "@/stores/user";
 import { useWorkoutStore } from "@/stores/workout";
@@ -26,13 +29,22 @@ const { plan, isLoading, errorMessage } = storeToRefs(workoutStore);
 const isSaving = ref(false);
 const expandedId = ref<string | null>(null);
 const failedImageIds = ref<Record<string, boolean>>({});
+const fallbackSrcById = ref<Record<string, string>>({});
 
 const allItems = computed(() => {
-  if (!plan.value) return [] as Array<WorkoutPlanItem & { phaseLabel: string }>;
+  if (!plan.value) return [] as Array<WorkoutPlanItem & { phaseLabel: string; doseLabel: string }>;
+  const withPhase = (
+    item: WorkoutPlanItem,
+    phaseLabel: string
+  ): WorkoutPlanItem & { phaseLabel: string; doseLabel: string } => ({
+    ...item,
+    phaseLabel,
+    doseLabel: formatExerciseDose(item),
+  });
   return [
-    ...plan.value.warmup.map((item) => ({ ...item, phaseLabel: "热身" })),
-    ...plan.value.main.map((item) => ({ ...item, phaseLabel: "正式" })),
-    ...plan.value.cooldown.map((item) => ({ ...item, phaseLabel: "拉伸" })),
+    ...plan.value.warmup.map((item) => withPhase(item, "热身")),
+    ...plan.value.main.map((item) => withPhase(item, "正式")),
+    ...plan.value.cooldown.map((item) => withPhase(item, "拉伸")),
   ];
 });
 
@@ -51,12 +63,28 @@ function toggleExpand(id: string): void {
   expandedId.value = expandedId.value === id ? null : id;
 }
 
-function hasDemoImage(item: WorkoutPlanItem): boolean {
-  return Boolean(item.image_url) && !failedImageIds.value[item.id];
+function displayImageUrl(item: WorkoutPlanItem): string | null {
+  return fallbackSrcById.value[item.id] || item.image_url || localExerciseDemoUrl(item.name_en, item.name_zh);
 }
 
-function onImageError(id: string): void {
-  failedImageIds.value = { ...failedImageIds.value, [id]: true };
+function hasDemoImage(item: WorkoutPlanItem): boolean {
+  return Boolean(displayImageUrl(item)) && !failedImageIds.value[item.id];
+}
+
+function onImageError(item: WorkoutPlanItem): void {
+  const local = localExerciseDemoUrl(item.name_en, item.name_zh);
+  const current = displayImageUrl(item);
+  if (local && current !== local) {
+    fallbackSrcById.value = { ...fallbackSrcById.value, [item.id]: local };
+    return;
+  }
+  failedImageIds.value = { ...failedImageIds.value, [item.id]: true };
+}
+
+function thumbToneClass(phaseLabel: string): string {
+  if (phaseLabel === "热身") return "exercise-thumb--warmup";
+  if (phaseLabel === "拉伸") return "exercise-thumb--cooldown";
+  return "exercise-thumb--main";
 }
 
 async function loadPlan(forceRefresh = false): Promise<void> {
@@ -141,7 +169,7 @@ onShow(() => {
     <scroll-view class="scroll" scroll-y>
       <view class="header">
         <text class="title">今日训练计划</text>
-        <text class="desc">根据恢复分从精选动作库生成，点开可看动作图示与要点</text>
+        <text class="desc">根据恢复分从精选动作库生成，每个动作含建议组数与次数（或时长），点开可看图示与要点</text>
       </view>
 
       <view v-if="isLoading && !plan" class="state">
@@ -177,16 +205,21 @@ onShow(() => {
             <image
               v-if="hasDemoImage(item)"
               class="exercise-thumb"
-              :src="item.image_url"
+              :src="displayImageUrl(item)"
               mode="aspectFill"
-              @error="onImageError(item.id)"
+              @error="onImageError(item)"
             />
-            <view v-else class="exercise-thumb exercise-thumb--empty">
-              <text class="thumb-fallback">{{ item.phaseLabel }}</text>
+            <view
+              v-else
+              class="exercise-thumb exercise-thumb--empty"
+              :class="thumbToneClass(item.phaseLabel)"
+            >
+              <text class="thumb-fallback">{{ formatExerciseThumbLabel(item) }}</text>
             </view>
             <view class="exercise-left">
               <text class="phase">{{ item.phaseLabel }}</text>
               <text class="exercise-name">{{ formatPlanItemTitle(item) }}</text>
+              <text v-if="item.doseLabel" class="exercise-dose">{{ item.doseLabel }}</text>
               <text class="exercise-tips">{{ item.tips }}</text>
             </view>
             <text class="chevron">{{ expandedId === item.id ? "收起" : "详情" }}</text>
@@ -195,10 +228,13 @@ onShow(() => {
             <image
               v-if="hasDemoImage(item)"
               class="exercise-demo"
-              :src="item.image_url"
+              :src="displayImageUrl(item)"
               mode="aspectFit"
-              @error="onImageError(item.id)"
+              @error="onImageError(item)"
             />
+            <text v-if="item.doseLabel" class="detail-line">
+              建议剂量：{{ item.doseLabel }}
+            </text>
             <text v-if="item.muscles_primary_zh?.length" class="detail-line">
               肌群：{{ item.muscles_primary_zh.join("、") }}
             </text>
@@ -366,9 +402,31 @@ onShow(() => {
   justify-content: center;
 }
 
+.exercise-thumb--warmup {
+  background-color: #fff7ed;
+}
+
+.exercise-thumb--main {
+  background-color: #f0fdfa;
+}
+
+.exercise-thumb--cooldown {
+  background-color: #f5f3ff;
+}
+
 .thumb-fallback {
-  font-size: 22rpx;
-  color: #94a3b8;
+  font-size: 40rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  color: #0f766e;
+}
+
+.exercise-thumb--warmup .thumb-fallback {
+  color: #c2410c;
+}
+
+.exercise-thumb--cooldown .thumb-fallback {
+  color: #6d28d9;
 }
 
 .exercise-left {
@@ -387,6 +445,14 @@ onShow(() => {
   font-size: 28rpx;
   font-weight: 600;
   color: #0f172a;
+}
+
+.exercise-dose {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #0d9488;
 }
 
 .exercise-tips {

@@ -6,7 +6,7 @@ import type {
   MorningBriefData,
   WorkoutReadiness,
 } from "@/lib/health/types";
-import type { WorkoutPlan } from "@/lib/health/workout-plan";
+import { ensureWorkoutPlanDoses, type WorkoutPlan } from "@/lib/health/workout-plan";
 
 /** morning-brief Edge Function 返回结构 */
 interface MorningBriefApiResponse {
@@ -80,7 +80,7 @@ export const agentApi = {
     if (!result.success || !result.data) {
       throw new Error(result.error || "生成训练计划失败");
     }
-    return result.data;
+    return ensureWorkoutPlanDoses(result.data);
   },
 
   /** 健康问答 */

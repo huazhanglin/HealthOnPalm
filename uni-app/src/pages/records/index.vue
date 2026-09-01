@@ -117,8 +117,6 @@ onShow(async () => {
         </view>
       </HaCard>
     </view>
-
-    </view>
   </view>
 </template>
 
