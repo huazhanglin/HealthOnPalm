@@ -46,7 +46,7 @@ export interface QueryAgentResult {
 
 /** 欢迎消息文案 */
 export const WELCOME_MESSAGE =
-  "你好！我是 HOP（Health On Palm）健康助手。有什么关于运动、睡眠、恢复的问题，随时问我～";
+  "你好！我是 HOP（掌握健康 / Health on Palm）助手。有什么关于运动、睡眠、恢复的问题，随时问我～";
 
 /** 输入最大字数 */
 export const CHAT_INPUT_MAX_LENGTH = 200;

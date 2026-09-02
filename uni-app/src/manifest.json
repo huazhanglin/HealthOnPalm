@@ -1,7 +1,7 @@
 {
-    "name" : "Health On Palm",
+    "name" : "掌握健康",
     "appid" : "__UNI__1A1BD81",
-    "description" : "Health On Palm (HOP) — 掌上健康智能体",
+    "description" : "Health on Palm (HOP) — 掌握健康智能体",
     "versionName" : "0.3.9",
     "versionCode" : 139,
     "transformPx" : false,
@@ -46,9 +46,9 @@
             },
             "ios" : {
                 "privacyDescription" : {
-                    "NSHealthShareUsageDescription" : "Health On Palm 需要读取您的活动（步数、距离、热量、运动）、睡眠分期、心率与心率变异、血氧、呼吸频率及体能指标，用于生成恢复分与个性化健康建议。",
-                    "NSHealthUpdateUsageDescription" : "Health On Palm 不会写入您的健康数据，此权限为系统要求项。",
-                    "NSMicrophoneUsageDescription" : "Health On Palm 需要使用麦克风，以便您通过语音与 HOP 助手对话。"
+                    "NSHealthShareUsageDescription" : "掌握健康（Health on Palm）需要读取您的活动（步数、距离、热量、运动）、睡眠分期、心率与心率变异、血氧、呼吸频率及体能指标，用于生成恢复分与个性化健康建议。",
+                    "NSHealthUpdateUsageDescription" : "掌握健康不会写入您的健康数据，此权限为系统要求项。",
+                    "NSMicrophoneUsageDescription" : "掌握健康需要使用麦克风，以便您通过语音与 HOP 助手对话。"
                 },
                 "capabilities" : {
                     "healthkit" : true
@@ -79,7 +79,7 @@
         "router" : {
             "mode" : "hash"
         },
-        "title" : "Health On Palm"
+        "title" : "掌握健康"
     },
     "uniStatistics" : {
         "enable" : false

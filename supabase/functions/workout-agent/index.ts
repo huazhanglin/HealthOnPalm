@@ -12,7 +12,7 @@ import { runSafetyCheck } from "../_shared/safety.ts";
 
 const SILICONFLOW_API_KEY = Deno.env.get("SILICONFLOW_API_KEY") ?? "";
 
-const WORKOUT_SYSTEM_PROMPT = `你是 Health On Palm（简称 HOP）的专业健身教练。
+const WORKOUT_SYSTEM_PROMPT = `你是 Health on Palm（简称 HOP，中文名「掌握健康」）的专业健身教练。
 
 你的职责：
 - 根据用户的恢复分和偏好，从「候选动作清单」中选出今日训练

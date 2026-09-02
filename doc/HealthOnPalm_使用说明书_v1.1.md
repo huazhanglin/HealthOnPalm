@@ -1,6 +1,6 @@
 # Health On Palm（HOP）使用说明书
 
-> **产品名称**：Health On Palm（掌上健康 / HOP）  
+> **产品名称**：Health on Palm（HOP）／中文名「掌握健康」  
 > **文档版本**：v1.1  
 > **更新日期**：2026-08-20  
 > **适用客户端**：iOS App（iPhone，建议 iOS 14+）  

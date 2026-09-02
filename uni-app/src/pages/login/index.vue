@@ -2,6 +2,7 @@
 import { onReady, onShow } from "@dcloudio/uni-app";
 import { computed, ref, watch } from "vue";
 import { HaBrandLogo } from "@/components/common";
+import { APP_NAME, APP_NAME_ZH } from "@/config/brand";
 import { useUserStore } from "@/stores/user";
 import { routeAuthedUserFromLogin } from "@/utils/auth-routing";
 import { isValidEmail, isValidPassword } from "@/utils/email";
@@ -138,14 +139,16 @@ if (userStore.isLoggedIn) {
   <view>
     <view v-if="userStore.isLoggedIn" class="entering">
       <HaBrandLogo size="large" />
-      <text class="entering-title">Health On Palm</text>
+      <text class="entering-title">{{ APP_NAME }}</text>
+      <text class="entering-zh">{{ APP_NAME_ZH }}</text>
       <text class="entering-text">正在进入…</text>
     </view>
     <scroll-view v-else class="page" scroll-y>
     <view class="container">
       <view class="brand">
         <HaBrandLogo size="large" />
-        <text class="brand-title">Health On Palm</text>
+        <text class="brand-title">{{ APP_NAME }}</text>
+        <text class="brand-zh">{{ APP_NAME_ZH }}</text>
         <text class="brand-subtitle">{{ subtitle }}</text>
       </view>
 
@@ -245,6 +248,12 @@ if (userStore.isLoggedIn) {
   color: #0f172a;
 }
 
+.entering-zh {
+  font-size: 28rpx;
+  color: #0d9488;
+  font-weight: 600;
+}
+
 .entering-text {
   font-size: 26rpx;
   color: #64748b;
@@ -272,6 +281,12 @@ if (userStore.isLoggedIn) {
   font-size: 44rpx;
   font-weight: 600;
   color: #0f172a;
+}
+
+.brand-zh {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #0d9488;
 }
 
 .brand-subtitle {

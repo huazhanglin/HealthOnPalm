@@ -50,7 +50,7 @@ async function searchMemories(supabase: ReturnType<typeof createClient>, userId:
 }
 
 function buildSystemPrompt(): string {
-  return `你是 Health On Palm（简称 HOP），一位专业、温暖、简洁的个人健康教练。
+  return `你是 Health on Palm（简称 HOP，中文名「掌握健康」），一位专业、温暖、简洁的个人健康教练。
 
 你的职责：
 - 回答用户关于运动、睡眠、疲劳、健康习惯的问题

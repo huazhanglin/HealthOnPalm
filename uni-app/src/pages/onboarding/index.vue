@@ -3,6 +3,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { nextTick, reactive, ref, watch } from "vue";
 import { completeOnboarding } from "@/api/user";
 import { HaBrandLogo } from "@/components/common";
+import { APP_NAME, APP_NAME_ZH } from "@/config/brand";
 import {
   AGE_OPTIONS,
   FITNESS_LEVEL_OPTIONS,
@@ -208,7 +209,8 @@ onShow(async () => {
       <swiper-item class="swiper-slide">
         <view class="step-content center">
           <HaBrandLogo size="xlarge" />
-          <text class="welcome-title">欢迎使用 Health On Palm</text>
+          <text class="welcome-title">欢迎使用 {{ APP_NAME_ZH }}</text>
+          <text class="welcome-en">{{ APP_NAME }}</text>
           <text class="welcome-desc">每天根据你的身体状态，自动规划下一步行动</text>
           <button class="primary-btn" @tap="handleNext">开始</button>
         </view>
@@ -308,7 +310,7 @@ onShow(async () => {
           <text class="step-icon">🔐</text>
           <text class="step-title">健康数据授权</text>
           <text class="step-subtitle block">
-            Health On Palm 需要读取步数、睡眠等健康数据，才能提供个性化建议。你的数据仅用于个人健康分析，不会分享给第三方。
+            {{ APP_NAME_ZH }}需要读取步数、睡眠等健康数据，才能提供个性化建议。你的数据仅用于个人健康分析，不会分享给第三方。
           </text>
 
           <view class="auth-card">
@@ -426,6 +428,14 @@ onShow(async () => {
   font-size: 40rpx;
   font-weight: 600;
   color: #0f172a;
+  text-align: center;
+}
+
+.welcome-en {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #0d9488;
   text-align: center;
 }
 

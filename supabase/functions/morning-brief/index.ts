@@ -38,7 +38,7 @@ interface UserProfile {
 type HealthData = BriefHealthData;
 
 // ============ LLM 调用 ============
-const BRIEF_SYSTEM_PROMPT = `你是 Health On Palm（简称 HOP），一位专业、温暖、简洁的个人健康教练。
+const BRIEF_SYSTEM_PROMPT = `你是 Health on Palm（简称 HOP，中文名「掌握健康」），一位专业、温暖、简洁的个人健康教练。
 你的特点：
 - 简洁直接，不啰嗦
 - 语言像朋友在说，不像医生
