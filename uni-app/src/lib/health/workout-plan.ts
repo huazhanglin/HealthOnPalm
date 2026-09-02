@@ -57,37 +57,76 @@ export interface WorkoutPlan {
 }
 
 type DosePhase = "warmup" | "main" | "cooldown";
+type DoseFields = Pick<WorkoutPlanItem, "sets" | "reps" | "duration_seconds">;
+type DoseItem = Pick<WorkoutPlanItem, "name_zh" | "name_en" | "category_zh" | "intensity">;
 
 function utcYmd(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-function looksTimedExercise(item: Pick<WorkoutPlanItem, "name_zh" | "name_en" | "category_zh">): boolean {
-  const text = `${item.name_zh} ${item.name_en} ${item.category_zh}`.toLowerCase();
-  return /plank|hold|stretch|isometric|平板|支撑|拉伸|静蹲|wall sit|鸟狗|dead bug/.test(
-    text
-  );
+function exerciseText(item: Pick<WorkoutPlanItem, "name_zh" | "name_en" | "category_zh">): string {
+  return `${item.name_zh} ${item.name_en} ${item.category_zh}`.toLowerCase();
 }
 
-function hasExerciseDose(item: WorkoutPlanItem): boolean {
-  const sets = Number(item.sets);
-  const hasSets = Number.isFinite(sets) && sets >= 1;
-  const hasReps = typeof item.reps === "string" && item.reps.trim().length > 0;
-  const duration = Number(item.duration_seconds);
-  const hasDuration = Number.isFinite(duration) && duration >= 5;
-  return (hasSets && hasReps) || hasDuration;
+/** 动态平板变式（肩触、开合等）按次数，不按时长 */
+function isDynamicPlankVariant(item: Pick<WorkoutPlanItem, "name_en">): boolean {
+  const en = (item.name_en || "").toLowerCase();
+  if (!/plank/.test(en)) return false;
+  return /tap|jack|reach|row|lift|extension|alternating|to /.test(en);
+}
+
+/** 静态维持：标准/侧平板、静蹲、拉伸。鸟狗、死虫、俯卧撑等走次数 */
+function looksTimedExercise(item: Pick<WorkoutPlanItem, "name_zh" | "name_en" | "category_zh">): boolean {
+  const text = exerciseText(item);
+  if (/stretch|拉伸|伸展/.test(text)) return true;
+  if (/wall sit|静蹲|靠墙坐/.test(text)) return true;
+  if (isDynamicPlankVariant(item)) return false;
+  return /(?:^|[\s(])plank|side plank|forearm plank|front plank|reverse plank|平板/.test(text);
+}
+
+function isHoldExercise(item: Pick<WorkoutPlanItem, "name_zh" | "name_en" | "category_zh">): boolean {
+  const text = exerciseText(item);
+  return /plank|平板|wall sit|静蹲|靠墙坐/.test(text) && !isDynamicPlankVariant(item);
+}
+
+function clampSets(raw: unknown): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(6, Math.max(1, Math.round(n)));
+}
+
+function parseReps(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim().replace(/[–—]/g, "-").replace(/次/g, "").trim();
+  if (!s) return null;
+  if (/^\d{1,2}(-\d{1,2})?$/.test(s)) return s;
+  return null;
+}
+
+function clampTimedDuration(raw: unknown, minSeconds: number): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < minSeconds) return null;
+  return Math.min(180, Math.round(n));
+}
+
+function minTimedSeconds(item: DoseItem, phase: DosePhase): number {
+  if (phase === "cooldown") return 20;
+  if (isHoldExercise(item)) return 30;
+  return 20;
 }
 
 /** 缺剂量时按阶段与恢复档补保守默认值（不写重量） */
 export function defaultExerciseDose(
   phase: DosePhase,
-  item: Pick<WorkoutPlanItem, "name_zh" | "name_en" | "category_zh" | "intensity">,
+  item: DoseItem,
   readiness: WorkoutPlan["workout_readiness"]
-): Pick<WorkoutPlanItem, "sets" | "reps" | "duration_seconds"> {
-  const timed = looksTimedExercise(item);
+): DoseFields {
+  const timed = phase === "cooldown" || looksTimedExercise(item);
 
   if (phase === "warmup") {
-    if (timed) return { sets: 1, reps: null, duration_seconds: 30 };
+    if (timed) {
+      return { sets: 1, reps: null, duration_seconds: isHoldExercise(item) ? 30 : 20 };
+    }
     return { sets: 1, reps: "8-10", duration_seconds: null };
   }
 
@@ -96,9 +135,8 @@ export function defaultExerciseDose(
   }
 
   if (timed) {
-    if (readiness === "rest") return { sets: 2, reps: null, duration_seconds: 20 };
-    if (readiness === "light") return { sets: 2, reps: null, duration_seconds: 25 };
-    return { sets: 3, reps: null, duration_seconds: 30 };
+    const sets = readiness === "train" ? 3 : 2;
+    return { sets, reps: null, duration_seconds: 30 };
   }
 
   if (readiness === "rest") return { sets: 2, reps: "8-10", duration_seconds: null };
@@ -107,48 +145,58 @@ export function defaultExerciseDose(
   return { sets: 3, reps: "8-12", duration_seconds: null };
 }
 
-export function ensureWorkoutPlanDoses(plan: WorkoutPlan): WorkoutPlan {
-  const readiness = plan.workout_readiness;
-  const fix = (item: WorkoutPlanItem, phase: DosePhase): WorkoutPlanItem => {
-    if (hasExerciseDose(item)) {
-      return {
-        ...item,
-        sets: item.sets != null ? Math.min(6, Math.max(1, Math.round(Number(item.sets)))) : item.sets,
-        reps: item.reps?.trim() || null,
-        duration_seconds:
-          item.duration_seconds != null
-            ? Math.min(180, Math.max(5, Math.round(Number(item.duration_seconds))))
-            : null,
-      };
-    }
-    return { ...item, ...defaultExerciseDose(phase, item, readiness) };
-  };
+function normalizeExerciseDose(
+  item: WorkoutPlanItem,
+  phase: DosePhase,
+  readiness: WorkoutPlan["workout_readiness"]
+): WorkoutPlanItem {
+  const defaults = defaultExerciseDose(phase, item, readiness);
+  const timed = phase === "cooldown" || looksTimedExercise(item);
+
+  if (timed) {
+    return {
+      ...item,
+      sets: clampSets(item.sets) ?? defaults.sets,
+      reps: null,
+      duration_seconds:
+        clampTimedDuration(item.duration_seconds, minTimedSeconds(item, phase)) ??
+        defaults.duration_seconds,
+    };
+  }
 
   return {
-    ...plan,
-    warmup: plan.warmup.map((item) => fix(item, "warmup")),
-    main: plan.main.map((item) => fix(item, "main")),
-    cooldown: plan.cooldown.map((item) => fix(item, "cooldown")),
+    ...item,
+    sets: clampSets(item.sets) ?? defaults.sets,
+    reps: parseReps(item.reps) ?? defaults.reps,
+    duration_seconds: null,
   };
 }
 
-/** 展示用剂量文案，如「3 组 × 10–12 次」 */
-export function formatExerciseDose(
-  item: Pick<WorkoutPlanItem, "sets" | "reps" | "duration_seconds">
-): string {
+export function ensureWorkoutPlanDoses(plan: WorkoutPlan): WorkoutPlan {
+  const readiness = plan.workout_readiness;
+  return {
+    ...plan,
+    warmup: plan.warmup.map((item) => normalizeExerciseDose(item, "warmup", readiness)),
+    main: plan.main.map((item) => normalizeExerciseDose(item, "main", readiness)),
+    cooldown: plan.cooldown.map((item) => normalizeExerciseDose(item, "cooldown", readiness)),
+  };
+}
+
+/** 展示用剂量文案，如「3 组 × 10–12 次」或「3 组 × 每组 30 秒」 */
+export function formatExerciseDose(item: DoseFields): string {
   const sets = Number(item.sets);
   const duration = Number(item.duration_seconds);
   const reps = typeof item.reps === "string" ? item.reps.trim() : "";
 
-  if (Number.isFinite(duration) && duration >= 5) {
+  if (Number.isFinite(sets) && sets >= 1 && reps) {
+    return `${Math.round(sets)} 组 × ${reps.replace(/-/g, "–")} 次`;
+  }
+
+  if (Number.isFinite(duration) && duration >= 20) {
     if (Number.isFinite(sets) && sets >= 1) {
       return `${Math.round(sets)} 组 × 每组 ${Math.round(duration)} 秒`;
     }
     return `保持 ${Math.round(duration)} 秒`;
-  }
-
-  if (Number.isFinite(sets) && sets >= 1 && reps) {
-    return `${Math.round(sets)} 组 × ${reps.replace(/-/g, "–")} 次`;
   }
 
   return "";

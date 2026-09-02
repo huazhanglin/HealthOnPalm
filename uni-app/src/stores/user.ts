@@ -3,7 +3,9 @@ import { computed, ref } from "vue";
 // #ifdef APP-PLUS
 import { signInWithEmail, signUpWithEmail } from "@/api/supabase-auth";
 // #endif
-import { getUserProfile } from "@/api/user";
+import { deleteAccount as deleteAccountRequest, getUserProfile } from "@/api/user";
+import { clearHealthKitLocalState } from "@/lib/healthkit";
+import { clearLocalOnboardingDone } from "@/utils/onboarding";
 import {
   AUTH_STORAGE_KEY,
   type AuthErrorInfo,
@@ -38,7 +40,7 @@ function toAuthError(error: { message: string; code?: string }): AuthErrorInfo {
     /email not confirmed|confirm your email/i.test(message)
   ) {
     return {
-      message: "请先确认邮箱，或在 Supabase 关闭 Confirm email（内测推荐）",
+      message: "请先到邮箱确认后再登录",
       code: code ?? "email_not_confirmed",
     };
   }
@@ -228,7 +230,7 @@ export const useUserStore = defineStore("user", () => {
       if (!data.session || !data.user?.id) {
         throw toAuthError({
           message:
-            "注册成功，但需要邮箱确认后才能登录。内测请在 Supabase 关闭 Confirm email",
+            "注册成功，请先到邮箱确认后再登录",
           code: "email_confirmation_required",
         });
       }
@@ -295,6 +297,21 @@ export const useUserStore = defineStore("user", () => {
     clearLocalAuthState();
   }
 
+  async function deleteAccount(): Promise<void> {
+    const uid = userId.value;
+    const result = await deleteAccountRequest();
+    if (!result.success) {
+      throw toAuthError({
+        message:
+          result.error ||
+          "删除账号失败，请稍后重试或发邮件至 huazhang.lin@gmail.com",
+      });
+    }
+    clearLocalOnboardingDone(uid);
+    clearHealthKitLocalState();
+    clearLocalAuthState();
+  }
+
   return {
     email,
     phone,
@@ -310,5 +327,6 @@ export const useUserStore = defineStore("user", () => {
     register,
     login,
     logout,
+    deleteAccount,
   };
 });

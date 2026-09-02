@@ -1,6 +1,7 @@
 // #ifdef H5
 import { supabase } from "@/api/supabase";
 // #endif
+import { callEdgeFunction } from "@/api/edge";
 import { fetchUserRow } from "@/api/supabase-auth";
 import { restUpdate, restUpsert } from "@/api/supabase-rest";
 import type { User } from "@/types/database";
@@ -210,4 +211,26 @@ export async function completeOnboarding(
 
   return { success: true, data: upsertData };
   // #endif
+}
+
+/** 删除当前账号及云端关联数据（Edge Function delete-account） */
+export async function deleteAccount(): Promise<UserApiResult> {
+  try {
+    const result = await callEdgeFunction<{ success?: boolean; error?: string }>(
+      "delete-account",
+      {}
+    );
+    if (result.success === false) {
+      return {
+        success: false,
+        error: result.error || "删除账号失败，请稍后重试",
+      };
+    }
+    return { success: true };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "删除账号失败，请稍后重试";
+    console.error("[userApi] 删除账号失败:", message);
+    return { success: false, error: message };
+  }
 }

@@ -29,6 +29,7 @@ import {
   markFresh,
 } from "@/utils/freshness";
 import { switchToTab } from "@/utils/tab";
+import { openLegalDocument, type LegalDocId } from "@/lib/legal/documents";
 import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
 
 const userStore = useUserStore();
@@ -36,6 +37,7 @@ const userStore = useUserStore();
 const form = reactive<ProfileFormData>(createDefaultProfileForm());
 const isSaving = ref(false);
 const isLoading = ref(false);
+const isDeleting = ref(false);
 const ageIndex = ref(0);
 
 const avatarFallback = "brand" as const;
@@ -69,6 +71,10 @@ function openHealthKitSync(): void {
   }
 
   uni.navigateTo({ url: "/pages/healthkit/authorize?from=profile" });
+}
+
+function openLegal(id: LegalDocId): void {
+  openLegalDocument(id);
 }
 
 /** 年龄展示文案 */
@@ -209,6 +215,65 @@ async function handleSave(): Promise<void> {
 async function handleLogout(): Promise<void> {
   await userStore.logout();
   uni.reLaunch({ url: "/pages/login/index" });
+}
+
+function confirmModal(options: {
+  title: string;
+  content: string;
+  confirmText: string;
+}): Promise<boolean> {
+  return new Promise((resolve) => {
+    uni.showModal({
+      title: options.title,
+      content: options.content,
+      confirmText: options.confirmText,
+      confirmColor: "#ef4444",
+      cancelText: "取消",
+      success: (res) => resolve(Boolean(res.confirm)),
+      fail: () => resolve(false),
+    });
+  });
+}
+
+/** 删除账号：两次确认后调用云端删除 */
+async function handleDeleteAccount(): Promise<void> {
+  if (isDeleting.value || isSaving.value) return;
+
+  const first = await confirmModal({
+    title: "删除账号",
+    content:
+      "删除后不可恢复。将清除云端档案、同步记录、运动 / 睡眠 / 心情和对话。Apple「健康」授权需你自己在系统设置中关闭。",
+    confirmText: "继续删除",
+  });
+  if (!first) return;
+
+  const second = await confirmModal({
+    title: "再次确认",
+    content:
+      "请再次确认删除账号。此操作不可恢复。失败可发邮件至 huazhang.lin@gmail.com。",
+    confirmText: "确认删除",
+  });
+  if (!second) return;
+
+  isDeleting.value = true;
+  showLoading("正在删除账号…");
+  try {
+    await userStore.deleteAccount();
+    hideLoading();
+    uni.showToast({ title: "账号已删除", icon: "success" });
+    setTimeout(() => {
+      uni.reLaunch({ url: "/pages/login/index" });
+    }, 400);
+  } catch (error) {
+    hideLoading();
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message: string }).message)
+        : "删除失败，请稍后重试或发邮件联系我们";
+    showErrorToast(message);
+  } finally {
+    isDeleting.value = false;
+  }
 }
 
 onShow(async () => {
@@ -426,18 +491,39 @@ onShow(async () => {
         </view>
       </view>
 
+      <!-- 账号与隐私 -->
+      <view class="section-card">
+        <text class="section-title">账号与隐私</text>
+        <view class="legal-row" @tap="openLegal('privacy')">
+          <text class="legal-row-label">隐私政策</text>
+          <text class="legal-row-arrow">›</text>
+        </view>
+        <view class="legal-row last" @tap="openLegal('terms')">
+          <text class="legal-row-label">用户协议</text>
+          <text class="legal-row-arrow">›</text>
+        </view>
+      </view>
+
       <!-- 保存按钮 -->
       <button
         class="save-btn"
-        :disabled="isSaving || isLoading"
+        :disabled="isSaving || isLoading || isDeleting"
         :loading="isSaving"
         @tap="handleSave"
       >
         保存档案
       </button>
 
-      <button class="logout-btn" :disabled="isSaving" @tap="handleLogout">
+      <button class="logout-btn" :disabled="isSaving || isDeleting" @tap="handleLogout">
         退出登录
+      </button>
+
+      <button
+        class="delete-account-btn"
+        :disabled="isSaving || isLoading || isDeleting"
+        @tap="handleDeleteAccount"
+      >
+        删除账号
       </button>
     </view>
   </view>
@@ -642,6 +728,19 @@ onShow(async () => {
   border: none;
 }
 
+.delete-account-btn {
+  height: auto;
+  line-height: 1.5;
+  padding: 16rpx 0 48rpx;
+  background-color: transparent;
+  color: #94a3b8;
+  font-size: 26rpx;
+}
+
+.delete-account-btn::after {
+  border: none;
+}
+
 .sync-entry {
   border: 2rpx solid #ccfbf1;
   background: linear-gradient(180deg, #ffffff 0%, #f0fdfa 100%);
@@ -689,5 +788,30 @@ onShow(async () => {
 .sync-entry-time {
   font-size: 22rpx;
   color: #94a3b8;
+}
+
+.legal-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.legal-row.last {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.legal-row-label {
+  font-size: 28rpx;
+  color: #0f172a;
+}
+
+.legal-row-arrow {
+  font-size: 36rpx;
+  color: #94a3b8;
+  font-weight: 300;
 }
 </style>

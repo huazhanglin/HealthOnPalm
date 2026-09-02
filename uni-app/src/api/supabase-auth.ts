@@ -147,7 +147,7 @@ export async function signUpWithEmail(
   }
 
   throw new AuthRequestError(
-    "注册成功，但需要邮箱确认后才能登录。内测请在 Supabase Authentication → Providers → Email 关闭 Confirm email",
+    "注册成功，请先到邮箱确认后再登录",
     "email_confirmation_required",
     200
   );

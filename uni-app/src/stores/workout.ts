@@ -17,11 +17,7 @@ import {
   writePersistedWorkoutPlan,
 } from "@/lib/health/workout-plan-cache";
 import { useUserStore } from "@/stores/user";
-import {
-  WORKOUT_PLAN_TTL_MS,
-  isFresh as isStampFresh,
-  markFresh,
-} from "@/utils/freshness";
+import { markFresh } from "@/utils/freshness";
 
 let loadInFlight: Promise<void> | null = null;
 
@@ -38,25 +34,13 @@ export const useWorkoutStore = defineStore("workout", () => {
   }
 
   function hydrateLocal(userId: string): void {
-    if (plan.value) {
-      plan.value = applyLocalExerciseDemos(ensureWorkoutPlanDoses(plan.value));
+    const stored = readPersistedWorkoutPlan(userId);
+    if (!stored) {
+      plan.value = null;
       return;
     }
-    const stored = readPersistedWorkoutPlan(userId);
-    if (!stored) return;
     plan.value = applyLocalExerciseDemos(ensureWorkoutPlanDoses(stored.plan));
-    if (
-      stored.updatedAt > 0 &&
-      Date.now() - stored.updatedAt < WORKOUT_PLAN_TTL_MS
-    ) {
-      markFresh(`workout-plan:${userId}`);
-    }
-  }
-
-  async function applyPlan(userId: string, next: WorkoutPlan): Promise<void> {
-    persist(userId, next);
-    const withMedia = await enrichWorkoutPlanMedia(next);
-    persist(userId, withMedia);
+    markFresh(`workout-plan:${userId}`);
   }
 
   async function loadPlan(forceRefresh = false): Promise<void> {
@@ -66,12 +50,13 @@ export const useWorkoutStore = defineStore("workout", () => {
 
     hydrateLocal(userId);
 
-    if (
-      !forceRefresh &&
-      plan.value &&
-      isStampFresh(`workout-plan:${userId}`, WORKOUT_PLAN_TTL_MS)
-    ) {
-      if ([...plan.value.warmup, ...plan.value.main, ...plan.value.cooldown].some((item) => !item.image_url)) {
+    // 当天本地计划直接展示，避免每次进训练页都等 LLM
+    if (!forceRefresh && plan.value) {
+      if (
+        [...plan.value.warmup, ...plan.value.main, ...plan.value.cooldown].some(
+          (item) => !item.image_url
+        )
+      ) {
         void enrichWorkoutPlanMedia(plan.value).then((withMedia) => {
           persist(userId, withMedia);
         });
@@ -86,14 +71,16 @@ export const useWorkoutStore = defineStore("workout", () => {
 
     const run = (async () => {
       errorMessage.value = "";
-      const blocking = !plan.value;
-      if (blocking) isLoading.value = true;
+      if (!plan.value) isLoading.value = true;
 
       try {
         if (!forceRefresh) {
           const cached = await fetchTodayCachedWorkoutPlan(userId);
           if (cached) {
-            await applyPlan(userId, cached);
+            persist(userId, cached);
+            void enrichWorkoutPlanMedia(cached).then((withMedia) => {
+              persist(userId, withMedia);
+            });
             return;
           }
         }
@@ -102,7 +89,10 @@ export const useWorkoutStore = defineStore("workout", () => {
         const generated = await agentApi.getWorkoutPlan(userId, {
           forceRefresh,
         });
-        await applyPlan(userId, generated);
+        persist(userId, generated);
+        void enrichWorkoutPlanMedia(generated).then((withMedia) => {
+          persist(userId, withMedia);
+        });
       } catch (error) {
         console.error("[workout] 加载计划失败:", error);
         const message = error instanceof Error ? error.message : "加载失败";

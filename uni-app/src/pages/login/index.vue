@@ -7,6 +7,7 @@ import { useUserStore } from "@/stores/user";
 import { routeAuthedUserFromLogin } from "@/utils/auth-routing";
 import { isValidEmail, isValidPassword } from "@/utils/email";
 import { closeSplashscreen } from "@/utils/splash";
+import { openLegalDocument } from "@/lib/legal/documents";
 import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
 
 type AuthMode = "login" | "register";
@@ -97,8 +98,12 @@ async function handleSubmit(): Promise<void> {
   }
 }
 
+function openTerms(): void {
+  openLegalDocument("terms");
+}
+
 function openPrivacy(): void {
-  uni.showToast({ title: "隐私政策页面开发中", icon: "none" });
+  openLegalDocument("privacy");
 }
 
 let routedFromLogin = false;
@@ -203,7 +208,7 @@ if (userStore.isLoggedIn) {
         </template>
 
         <text class="form-hint">
-          内测账号请使用常用邮箱。若注册后无法登录，请在 Supabase 关闭 Confirm email。
+          使用常用邮箱注册。密码至少 6 位。
         </text>
 
         <button
@@ -222,7 +227,7 @@ if (userStore.isLoggedIn) {
 
       <view class="footer">
         <text class="footer-text">登录即表示同意</text>
-        <text class="footer-link" @tap="openPrivacy">《用户协议》</text>
+        <text class="footer-link" @tap="openTerms">《用户协议》</text>
         <text class="footer-text">与</text>
         <text class="footer-link" @tap="openPrivacy">《隐私政策》</text>
       </view>

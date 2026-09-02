@@ -24,6 +24,12 @@ export function getLocalOnboardingDone(userId: string | null): boolean {
   }
 }
 
+/** 删除账号时去掉该用户的本地引导缓存 */
+export function clearLocalOnboardingDone(userId: string | null): void {
+  if (!userId) return;
+  setLocalOnboardingDone(userId, false);
+}
+
 /** 写入本地引导完成缓存 */
 export function setLocalOnboardingDone(userId: string, done: boolean): void {
   const map = getStorageJson<Record<string, boolean>>(ONBOARDING_DONE_KEY) ?? {};

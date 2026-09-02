@@ -23,7 +23,10 @@ const WORKOUT_SYSTEM_PROMPT = `你是 Health on Palm（简称 HOP，中文名「
 2. 恢复分 < 50 或 readiness=rest：只选 light / warmup / cooldown，禁止高强度主训
 3. 恢复分 50-80 或 readiness=light：以 light/moderate 为主，主训动作不超过偏好时长的 70%
 4. 恢复分 > 80 或 readiness=train：可正常强度，仍禁止编造动作
-5. 每个动作必须给出组数，以及次数或时长（秒）；禁止给出具体公斤重量或负荷。热身 1 组，正式 2–4 组，拉伸 1 组按时长。次数用区间如 "8-12"。平板/拉伸等用 duration_seconds，reps 填 null
+5. 每个动作必须给出组数，以及次数或时长二者之一，禁止同时填写。禁止给出具体公斤重量或负荷。
+   - 重复类（深蹲、俯卧撑、鸟狗式、死虫、开合跳、平板肩触等动态动作）：sets + reps（如 "8-12"），duration_seconds 必须为 null
+   - 静态维持（标准平板、侧平板、静蹲）与拉伸：sets + duration_seconds，reps 必须为 null。平板/侧平板 duration_seconds 不得低于 30
+   - 热身 1 组；正式 2–4 组；拉伸 1 组按时长（20–40 秒）
 6. 热身 1-2 个、正式 3-5 个、拉伸 1-2 个
 7. 不要在结尾附加固定免责声明句
 8. 只输出 JSON，不要 Markdown 代码块以外的解释
@@ -91,11 +94,7 @@ export interface WorkoutPlanPayload {
 }
 
 function todayYmd(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
 }
 
 function corsHeaders() {
@@ -113,6 +112,25 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+/** 避免冷启动后等 LLM 过久；超时则用模板计划 */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(label));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 function parseCachedPlan(raw: string | null | undefined): WorkoutPlanPayload | null {
   if (!raw) return null;
   try {
@@ -126,11 +144,29 @@ function parseCachedPlan(raw: string | null | undefined): WorkoutPlanPayload | n
   return null;
 }
 
+function exerciseText(item: Pick<PlanItem, "name_zh" | "name_en" | "category_zh">): string {
+  return `${item.name_zh} ${item.name_en} ${item.category_zh}`.toLowerCase();
+}
+
+function isDynamicPlankVariant(item: Pick<PlanItem, "name_en">): boolean {
+  const en = (item.name_en || "").toLowerCase();
+  if (!/plank/.test(en)) return false;
+  return /tap|jack|reach|row|lift|extension|alternating|to /.test(en);
+}
+
 function looksTimedExercise(item: Pick<PlanItem, "name_zh" | "name_en" | "category_zh">): boolean {
-  const text = `${item.name_zh} ${item.name_en} ${item.category_zh}`.toLowerCase();
-  return /plank|hold|stretch|isometric|平板|支撑|拉伸|静蹲|wall sit|鸟狗|dead bug/.test(
+  const text = exerciseText(item);
+  if (/stretch|拉伸|伸展/.test(text)) return true;
+  if (/wall sit|静蹲|靠墙坐/.test(text)) return true;
+  if (isDynamicPlankVariant(item)) return false;
+  return /(?:^|[\s(])plank|side plank|forearm plank|front plank|reverse plank|平板/.test(
     text,
   );
+}
+
+function isHoldExercise(item: Pick<PlanItem, "name_zh" | "name_en" | "category_zh">): boolean {
+  const text = exerciseText(item);
+  return /plank|平板|wall sit|静蹲|靠墙坐/.test(text) && !isDynamicPlankVariant(item);
 }
 
 function clampSets(raw: unknown): number | null {
@@ -147,17 +183,16 @@ function parseReps(raw: unknown): string | null {
   return null;
 }
 
-function clampDuration(raw: unknown): number | null {
+function clampDuration(raw: unknown, minSeconds = 20): number | null {
   const n = Number(raw);
-  if (!Number.isFinite(n)) return null;
-  return Math.min(180, Math.max(5, Math.round(n)));
+  if (!Number.isFinite(n) || n < minSeconds) return null;
+  return Math.min(180, Math.round(n));
 }
 
-function hasExerciseDose(item: Pick<PlanItem, "sets" | "reps" | "duration_seconds">): boolean {
-  const sets = clampSets(item.sets);
-  const reps = parseReps(item.reps);
-  const duration = clampDuration(item.duration_seconds);
-  return (sets != null && reps != null) || duration != null;
+function minTimedSeconds(item: Pick<PlanItem, "name_zh" | "name_en" | "category_zh">, phase: DosePhase): number {
+  if (phase === "cooldown") return 20;
+  if (isHoldExercise(item)) return 30;
+  return 20;
 }
 
 function defaultExerciseDose(
@@ -165,18 +200,22 @@ function defaultExerciseDose(
   item: Pick<PlanItem, "name_zh" | "name_en" | "category_zh" | "intensity">,
   readiness: Readiness,
 ): Pick<PlanItem, "sets" | "reps" | "duration_seconds"> {
-  const timed = looksTimedExercise(item);
+  const timed = phase === "cooldown" || looksTimedExercise(item);
   if (phase === "warmup") {
-    if (timed) return { sets: 1, reps: null, duration_seconds: 30 };
+    if (timed) {
+      return { sets: 1, reps: null, duration_seconds: isHoldExercise(item) ? 30 : 20 };
+    }
     return { sets: 1, reps: "8-10", duration_seconds: null };
   }
   if (phase === "cooldown") {
     return { sets: 1, reps: null, duration_seconds: 30 };
   }
   if (timed) {
-    if (readiness === "rest") return { sets: 2, reps: null, duration_seconds: 20 };
-    if (readiness === "light") return { sets: 2, reps: null, duration_seconds: 25 };
-    return { sets: 3, reps: null, duration_seconds: 30 };
+    return {
+      sets: readiness === "train" ? 3 : 2,
+      reps: null,
+      duration_seconds: 30,
+    };
   }
   if (readiness === "rest") return { sets: 2, reps: "8-10", duration_seconds: null };
   if (readiness === "light") return { sets: 2, reps: "10-12", duration_seconds: null };
@@ -190,17 +229,32 @@ function resolveItemDose(
   readiness: Readiness,
   pick?: LlmPick,
 ): PlanItem {
-  const sets = clampSets(pick?.sets ?? item.sets);
-  const reps = parseReps(pick?.reps ?? item.reps);
-  const duration = clampDuration(pick?.duration_seconds ?? item.duration_seconds);
   const merged: PlanItem = {
     ...item,
-    sets,
-    reps,
-    duration_seconds: duration,
+    sets: clampSets(pick?.sets ?? item.sets),
+    reps: parseReps(pick?.reps ?? item.reps),
+    duration_seconds: clampDuration(pick?.duration_seconds ?? item.duration_seconds, 1),
   };
-  if (hasExerciseDose(merged)) return merged;
-  return { ...item, ...defaultExerciseDose(phase, item, readiness) };
+  const defaults = defaultExerciseDose(phase, item, readiness);
+  const timed = phase === "cooldown" || looksTimedExercise(item);
+
+  if (timed) {
+    return {
+      ...item,
+      sets: clampSets(merged.sets) ?? defaults.sets,
+      reps: null,
+      duration_seconds:
+        clampDuration(merged.duration_seconds, minTimedSeconds(item, phase)) ??
+        defaults.duration_seconds,
+    };
+  }
+
+  return {
+    ...item,
+    sets: clampSets(merged.sets) ?? defaults.sets,
+    reps: parseReps(merged.reps) ?? defaults.reps,
+    duration_seconds: null,
+  };
 }
 
 function ensurePlanDoses(plan: WorkoutPlanPayload): WorkoutPlanPayload {
@@ -472,13 +526,17 @@ ${formatExerciseCatalogForPrompt(candidates)}
 `;
 
     try {
-      const llm = await callSiliconFlowLLMWithFallback(
-        SILICONFLOW_API_KEY,
-        [
-          { role: "system", content: WORKOUT_SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        { maxTokens: 1400, temperature: 0.5 },
+      const llm = await withTimeout(
+        callSiliconFlowLLMWithFallback(
+          SILICONFLOW_API_KEY,
+          [
+            { role: "system", content: WORKOUT_SYSTEM_PROMPT },
+            { role: "user", content: userPrompt },
+          ],
+          { maxTokens: 1400, temperature: 0.5 },
+        ),
+        12_000,
+        "llm-timeout",
       );
       const parsed = extractJsonObject(llm.content);
       if (parsed) {

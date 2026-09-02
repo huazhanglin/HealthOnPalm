@@ -5,7 +5,7 @@ export function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-/** 密码强度：内测至少 6 位（与 Supabase 默认一致） */
+/** 密码强度：至少 6 位（与 Supabase 默认一致） */
 export function isValidPassword(password: string): boolean {
   return password.length >= 6;
 }

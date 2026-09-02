@@ -140,6 +140,17 @@ export function clearHealthKitSetup(): void {
   }
 }
 
+/** 删除账号时清掉本机 HealthKit 标记（系统「健康」授权需用户自行关闭） */
+export function clearHealthKitLocalState(): void {
+  clearHealthKitSetup();
+  try {
+    uni.removeStorageSync(HEALTHKIT_STORAGE_KEYS.lastSyncAt);
+    uni.removeStorageSync(HEALTHKIT_STORAGE_KEYS.hasAuth);
+  } catch {
+    // ignore
+  }
+}
+
 /** 启动时校正：插件不可用则清除错误标记，避免跳过授权页 */
 export function ensureHealthKitAuthState(): void {
   // #ifdef APP-PLUS
