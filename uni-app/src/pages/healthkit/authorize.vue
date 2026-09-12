@@ -21,6 +21,7 @@ import {
   type HealthKitTodayPayload,
 } from "@/lib/healthkit";
 import { invalidateFresh } from "@/utils/freshness";
+import { ensureAiConsentDecided } from "@/lib/legal/ai-consent";
 import { switchToTab } from "@/utils/tab";
 import { useUserStore } from "@/stores/user";
 
@@ -261,6 +262,7 @@ function handleSkip(): void {
     uni.navigateBack();
     return;
   }
+  if (!ensureAiConsentDecided()) return;
   switchToTab("/pages/index/index");
 }
 

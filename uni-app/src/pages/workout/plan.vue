@@ -18,6 +18,7 @@ import type { ManualWorkoutType } from "@/lib/health/workout";
 import { useUserStore } from "@/stores/user";
 import { useWorkoutStore } from "@/stores/workout";
 import { ensureOnboarded } from "@/utils/onboarding";
+import { ensureAiConsentDecided } from "@/lib/legal/ai-consent";
 import { invalidateFresh } from "@/utils/freshness";
 import { hideLoading, showErrorToast, showLoading } from "@/utils/storage";
 
@@ -157,9 +158,10 @@ onShow(() => {
     if (!userStore.isLoggedIn) {
       userStore.hydrateFromStorageSync();
     }
-    void workoutStore.loadPlan(false);
     const onboarded = await ensureOnboarded();
     if (!onboarded) return;
+    if (!ensureAiConsentDecided()) return;
+    void workoutStore.loadPlan(false);
   })();
 });
 </script>

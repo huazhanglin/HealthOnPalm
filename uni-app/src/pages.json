@@ -106,6 +106,13 @@
         "navigationBarTitleText": "法律信息",
         "navigationBarBackgroundColor": "#FFFFFF"
       }
+    },
+    {
+      "path": "pages/legal/ai-consent",
+      "style": {
+        "navigationBarTitleText": "第三方 AI 说明",
+        "navigationBarBackgroundColor": "#FFFFFF"
+      }
     }
   ],
   "globalStyle": {

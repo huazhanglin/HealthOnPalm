@@ -1,5 +1,6 @@
 import { useUserStore } from "@/stores/user";
 import { clearHealthKitSetup, shouldPromptHealthKitAuth } from "@/lib/healthkit";
+import { hasAiConsentDecision } from "@/lib/legal/ai-consent";
 import {
   getLocalOnboardingDone,
   setLocalOnboardingDone,
@@ -63,6 +64,15 @@ function routeAfterOnboardingGate(): void {
   }
   // #endif
 
+  routeToHomeOrAiConsent();
+}
+
+function routeToHomeOrAiConsent(): void {
+  const userId = useUserStore().userId;
+  if (userId && !hasAiConsentDecision(userId)) {
+    uni.reLaunch({ url: "/pages/legal/ai-consent" });
+    return;
+  }
   uni.reLaunch({ url: "/pages/index/index" });
 }
 
@@ -75,7 +85,7 @@ export function routeAfterOnboarding(): void {
   }
   // #endif
 
-  uni.reLaunch({ url: "/pages/index/index" });
+  routeToHomeOrAiConsent();
 }
 
 /** 清除 HealthKit 授权标记（调试用） */

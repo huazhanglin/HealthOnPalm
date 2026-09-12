@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- 仅使用 HTTPS / 系统加密，无需每次上传后手填出口合规问卷 -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+  </dict>
+</plist>

@@ -17,6 +17,7 @@ import { useChatStore } from "@/stores/chat";
 import { useUserStore } from "@/stores/user";
 import { CHAT_INPUT_MAX_LENGTH } from "@/types/chat";
 import { ensureOnboarded } from "@/utils/onboarding";
+import { ensureAiConsentDecided, hasGrantedAiConsent, AI_CONSENT_DENIED_MESSAGE } from "@/lib/legal/ai-consent";
 import { showErrorToast } from "@/utils/storage";
 
 const userStore = useUserStore();
@@ -79,6 +80,10 @@ async function togglePlayMessage(messageId: string, content: string): Promise<vo
 
 function onMicTouchStart(): void {
   if (isSending.value || voiceState.value !== "idle") return;
+  if (!hasGrantedAiConsent(userStore.userId)) {
+    showErrorToast(AI_CONSENT_DENIED_MESSAGE);
+    return;
+  }
   voiceState.value = "recording";
   voiceHint.value = "松开结束";
   try {
@@ -145,6 +150,7 @@ async function initPage(): Promise<void> {
 
   const onboarded = await ensureOnboarded();
   if (!onboarded) return;
+  if (!ensureAiConsentDecided()) return;
 }
 
 onShow(() => {

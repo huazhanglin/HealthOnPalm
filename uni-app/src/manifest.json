@@ -3,7 +3,7 @@
     "appid" : "__UNI__1A1BD81",
     "description" : "Health on Palm (HOP) — 掌握健康智能体",
     "versionName" : "1.0.0",
-    "versionCode" : 140,
+    "versionCode" : 169,
     "transformPx" : false,
     "app-plus" : {
         "usingComponents" : true,
@@ -45,6 +45,7 @@
                 "permissions" : []
             },
             "ios" : {
+                "idfa" : false,
                 "privacyDescription" : {
                     "NSHealthShareUsageDescription" : "掌握健康（Health on Palm）需要读取您的活动（步数、距离、热量、运动）、睡眠分期、心率与心率变异、血氧、呼吸频率及体能指标，用于生成恢复分与个性化健康建议。",
                     "NSHealthUpdateUsageDescription" : "掌握健康不会写入您的健康数据，此权限为系统要求项。",

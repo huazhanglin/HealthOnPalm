@@ -24,6 +24,12 @@ import {
 } from "@/lib/healthkit";
 import { ensureOnboarded } from "@/utils/onboarding";
 import {
+  ensureAiConsentDecided,
+  hasAiConsentDecision,
+  hasGrantedAiConsent,
+  openAiConsentPage,
+} from "@/lib/legal/ai-consent";
+import {
   PROFILE_DATA_TTL_MS,
   isFresh,
   markFresh,
@@ -76,6 +82,16 @@ function openHealthKitSync(): void {
 function openLegal(id: LegalDocId): void {
   openLegalDocument(id);
 }
+
+function openAiConsent(): void {
+  openAiConsentPage();
+}
+
+const aiConsentLabel = computed(() => {
+  if (hasGrantedAiConsent(userStore.userId)) return "已同意";
+  if (hasAiConsentDecision(userStore.userId)) return "未开启";
+  return "未选择";
+});
 
 /** 年龄展示文案 */
 const ageLabel = computed(() => (form.age != null ? `${form.age} 岁` : "请选择年龄"));
@@ -130,19 +146,6 @@ async function loadProfile(options: { force?: boolean } = {}): Promise<void> {
   }
 }
 
-/** 点击头像（暂用默认，上传功能 W2 开放） */
-function onAvatarTap(): void {
-  uni.chooseImage({
-    count: 1,
-    sizeType: ["compressed"],
-    sourceType: ["album", "camera"],
-    success: () => {
-      uni.showToast({ title: "头像上传功能即将开放", icon: "none" });
-    },
-  });
-}
-
-/** 年龄选择 */
 function onAgeChange(event: { detail: { value: string | number } }): void {
   ageIndex.value = Number(event.detail.value);
   form.age = AGE_OPTIONS[ageIndex.value] ?? null;
@@ -279,6 +282,7 @@ async function handleDeleteAccount(): Promise<void> {
 onShow(async () => {
   const onboarded = await ensureOnboarded();
   if (!onboarded) return;
+  if (!ensureAiConsentDecided()) return;
   refreshHealthKitStatus();
   await loadProfile({ force: false });
 });
@@ -291,7 +295,7 @@ onShow(async () => {
       <view class="section-card">
         <text class="section-title">基本信息</text>
 
-        <view class="avatar-row" @tap="onAvatarTap">
+        <view class="avatar-row">
           <HaAvatar
             :src="form.avatar_url"
             :name="form.nickname"
@@ -299,8 +303,8 @@ onShow(async () => {
             size="large"
           />
           <view class="avatar-meta">
-            <text class="avatar-tip">点击上传头像</text>
-            <text class="avatar-sub">暂用默认头像</text>
+            <text class="avatar-tip">默认头像</text>
+            <text class="avatar-sub">当前版本不支持自定义头像</text>
           </view>
         </view>
 
@@ -494,6 +498,11 @@ onShow(async () => {
       <!-- 账号与隐私 -->
       <view class="section-card">
         <text class="section-title">账号与隐私</text>
+        <view class="legal-row" @tap="openAiConsent">
+          <text class="legal-row-label">第三方 AI 处理</text>
+          <text class="legal-row-status">{{ aiConsentLabel }}</text>
+          <text class="legal-row-arrow">›</text>
+        </view>
         <view class="legal-row" @tap="openLegal('privacy')">
           <text class="legal-row-label">隐私政策</text>
           <text class="legal-row-arrow">›</text>
@@ -807,6 +816,15 @@ onShow(async () => {
 .legal-row-label {
   font-size: 28rpx;
   color: #0f172a;
+}
+
+.legal-row-status {
+  flex: 1;
+  margin-left: 16rpx;
+  margin-right: 12rpx;
+  font-size: 24rpx;
+  color: #64748b;
+  text-align: right;
 }
 
 .legal-row-arrow {

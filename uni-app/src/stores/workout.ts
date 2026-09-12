@@ -18,6 +18,7 @@ import {
 } from "@/lib/health/workout-plan-cache";
 import { useUserStore } from "@/stores/user";
 import { markFresh } from "@/utils/freshness";
+import { hasGrantedAiConsent, AI_CONSENT_DENIED_MESSAGE } from "@/lib/legal/ai-consent";
 
 let loadInFlight: Promise<void> | null = null;
 
@@ -83,6 +84,11 @@ export const useWorkoutStore = defineStore("workout", () => {
             });
             return;
           }
+        }
+
+        if (!hasGrantedAiConsent(userId)) {
+          if (!plan.value) errorMessage.value = AI_CONSENT_DENIED_MESSAGE;
+          return;
         }
 
         if (!plan.value) isLoading.value = true;

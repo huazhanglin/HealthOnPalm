@@ -2,6 +2,7 @@
 import { onShow } from "@dcloudio/uni-app";
 import { HaCard } from "@/components/common";
 import { ensureOnboarded } from "@/utils/onboarding";
+import { ensureAiConsentDecided } from "@/lib/legal/ai-consent";
 
 function openWorkoutLog(): void {
   uni.navigateTo({ url: "/pages/workout/log" });
@@ -30,6 +31,7 @@ function openMoodHistory(): void {
 onShow(async () => {
   const onboarded = await ensureOnboarded();
   if (!onboarded) return;
+  if (!ensureAiConsentDecided()) return;
 });
 </script>
 

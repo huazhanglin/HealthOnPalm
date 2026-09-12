@@ -7,6 +7,7 @@ import type {
   WorkoutReadiness,
 } from "@/lib/health/types";
 import { ensureWorkoutPlanDoses, type WorkoutPlan } from "@/lib/health/workout-plan";
+import { requireAiProcessingConsent } from "@/lib/legal/ai-consent";
 
 /** morning-brief Edge Function 返回结构 */
 interface MorningBriefApiResponse {
@@ -36,6 +37,7 @@ interface WorkoutPlanApiResponse {
 export const agentApi = {
   /** 生成/刷新晨间简报（生成前强制同步最新 HealthKit） */
   async getMorningBrief(userId: string): Promise<MorningBriefData> {
+    requireAiProcessingConsent();
     try {
       const { ensureTodaySynced } = await import("@/lib/healthkit");
       await ensureTodaySynced({ force: true });
@@ -71,6 +73,7 @@ export const agentApi = {
     userId: string,
     options: { forceRefresh?: boolean; bodyweightOnly?: boolean } = {}
   ): Promise<WorkoutPlan> {
+    requireAiProcessingConsent();
     const result = await callEdgeFunction<WorkoutPlanApiResponse>("workout-agent", {
       user_id: userId,
       force_refresh: Boolean(options.forceRefresh),
@@ -85,6 +88,7 @@ export const agentApi = {
 
   /** 健康问答 */
   async askQuestion(userId: string, query: string): Promise<string> {
+    requireAiProcessingConsent();
     const result = await callEdgeFunction<QueryAgentResult>("query-agent", {
       user_id: userId,
       query,
@@ -97,6 +101,7 @@ export const agentApi = {
     userId: string,
     message: { role: string; content: string }
   ): Promise<void> {
+    requireAiProcessingConsent();
     await callEdgeFunction("memory-working", {
       user_id: userId,
       action: "write",

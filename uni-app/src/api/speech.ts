@@ -3,6 +3,7 @@
  */
 import { callEdgeFunction, getAccessToken } from "@/api/edge";
 import { supabaseAnonKey, supabaseUrl } from "@/config/env";
+import { requireAiProcessingConsent } from "@/lib/legal/ai-consent";
 
 export interface SpeechToTextResult {
   success: boolean;
@@ -77,6 +78,14 @@ function guessMimeFromPath(filePath: string): {
 export async function transcribeAudioFile(
   filePath: string
 ): Promise<SpeechToTextResult> {
+  try {
+    requireAiProcessingConsent();
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "尚未同意第三方 AI 处理",
+    };
+  }
   if (!canReadFileAsBase64()) {
     return uploadAudioMultipart(filePath);
   }
@@ -165,5 +174,13 @@ async function uploadAudioMultipart(
 export async function synthesizeSpeech(
   text: string
 ): Promise<TextToSpeechResult> {
+  try {
+    requireAiProcessingConsent();
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "尚未同意第三方 AI 处理",
+    };
+  }
   return callEdgeFunction<TextToSpeechResult>("text-to-speech", { text });
 }

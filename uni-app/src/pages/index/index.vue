@@ -23,6 +23,11 @@ import type {
 import { useUserStore } from "@/stores/user";
 import { useHomeStore } from "@/stores/home";
 import { ensureTodaySynced } from "@/lib/healthkit";
+import {
+  ensureAiConsentDecided,
+  hasGrantedAiConsent,
+  openAiConsentPage,
+} from "@/lib/legal/ai-consent";
 import { closeSplashscreen } from "@/utils/splash";
 import { ensureOnboarded } from "@/utils/onboarding";
 import { HOME_DATA_TTL_MS, invalidateFresh, markFresh } from "@/utils/freshness";
@@ -38,6 +43,7 @@ const isBriefLoading = ref(false);
 const isFeedbackSubmitting = ref(false);
 const briefError = ref(false);
 const briefErrorMessage = ref("");
+const briefNeedsConsent = ref(false);
 const briefData = ref<MorningBriefData | null>(null);
 /** 当前页面数据所属本地日期 YYYY-MM-DD，用于跨日丢弃内存态 */
 const dataDate = ref<string | null>(null);
@@ -207,6 +213,7 @@ async function loadMorningBrief(forceRefresh = false): Promise<void> {
   isBriefLoading.value = true;
   briefError.value = false;
   briefErrorMessage.value = "";
+  briefNeedsConsent.value = false;
   showModifyPanel.value = false;
   modifyNote.value = "";
 
@@ -218,6 +225,11 @@ async function loadMorningBrief(forceRefresh = false): Promise<void> {
         briefData.value = fromCache;
         return;
       }
+    }
+
+    if (!hasGrantedAiConsent(uid)) {
+      briefNeedsConsent.value = true;
+      return;
     }
 
     const result = await agentApi.getMorningBrief(uid);
@@ -373,6 +385,7 @@ async function ensureAuthAndLoad(options: { force?: boolean } = {}): Promise<voi
 
   const onboarded = await ensureOnboarded();
   if (!onboarded) return;
+  if (!ensureAiConsentDecided()) return;
 
   if (force) {
     isPageLoading.value = true;
@@ -475,6 +488,12 @@ onShow(() => {
 
         <view v-if="isBriefLoading && !briefData" class="brief-loading">
           <HaLoading text="生成晨报中..." />
+        </view>
+
+        <view v-else-if="briefNeedsConsent" class="brief-state" @tap="openAiConsentPage">
+          <text class="brief-state-text">
+            AI 晨报会把当日健康摘要发送给硅基流动（SiliconFlow）。点此查看说明并选择是否同意。
+          </text>
         </view>
 
         <view v-else-if="briefError" class="brief-state" @tap="retryMorningBrief">

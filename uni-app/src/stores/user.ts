@@ -5,6 +5,7 @@ import { signInWithEmail, signUpWithEmail } from "@/api/supabase-auth";
 // #endif
 import { deleteAccount as deleteAccountRequest, getUserProfile } from "@/api/user";
 import { clearHealthKitLocalState } from "@/lib/healthkit";
+import { clearAiProcessingConsent } from "@/lib/legal/ai-consent";
 import { clearLocalOnboardingDone } from "@/utils/onboarding";
 import {
   AUTH_STORAGE_KEY,
@@ -309,6 +310,7 @@ export const useUserStore = defineStore("user", () => {
     }
     clearLocalOnboardingDone(uid);
     clearHealthKitLocalState();
+    clearAiProcessingConsent(uid);
     clearLocalAuthState();
   }
 

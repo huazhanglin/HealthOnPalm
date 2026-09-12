@@ -195,6 +195,14 @@ export const useChatStore = defineStore("chat", () => {
       return;
     }
 
+    const { hasGrantedAiConsent, AI_CONSENT_DENIED_MESSAGE } = await import(
+      "@/lib/legal/ai-consent"
+    );
+    if (!hasGrantedAiConsent(userId)) {
+      HaToast.error(AI_CONSENT_DENIED_MESSAGE);
+      return;
+    }
+
     isSending.value = true;
     inputText.value = "";
 
@@ -233,7 +241,7 @@ export const useChatStore = defineStore("chat", () => {
 
       const errorReply = createMessage(
         "assistant",
-        `抱歉，暂时无法连接 AI 服务（${message}）。请稍后重试，或检查 Supabase 是否已部署 query-agent 并配置 SILICONFLOW_API_KEY。`
+        `抱歉，暂时无法回复（${message}）。请稍后重试。`
       );
       messages.value.push(errorReply);
       persistIfNeeded(userId);
